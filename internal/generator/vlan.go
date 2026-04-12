@@ -98,16 +98,19 @@ func (g *VlanGenerator) GenerateBatch(count int) ([]VlanConfig, error) {
 	return configs, nil
 }
 
-// maxVlanIDRetries is the maximum attempts to find a unique VLAN ID via random probing.
-const maxVlanIDRetries = 10000
+// maxVlanIDRandomRetries is the maximum random probing attempts before falling back to sequential scan.
+const maxVlanIDRandomRetries = 1000
 
 // nextUniqueVlanID generates a unique VLAN ID not already in use.
+// Uses random probing first for speed, then falls back to sequential scan to guarantee
+// finding a free ID as long as the pool is not exhausted.
 func (g *VlanGenerator) nextUniqueVlanID() (uint16, error) {
 	if len(g.usedVlanIDs) >= MaxUniqueVlans {
 		return 0, fmt.Errorf("VLAN ID pool exhausted: all %d IDs in use", MaxUniqueVlans)
 	}
 
-	for range maxVlanIDRetries {
+	// Fast path: random probing (efficient when pool utilization is low).
+	for range maxVlanIDRandomRetries {
 		//nolint:gosec // IntN(4085) yields 0-4084, adding MinVlanID stays within uint16
 		id := uint16(g.rng.IntN(MaxVlanID-MinVlanID+1)) + MinVlanID
 		if !g.usedVlanIDs[id] {
@@ -116,10 +119,15 @@ func (g *VlanGenerator) nextUniqueVlanID() (uint16, error) {
 		}
 	}
 
-	return 0, fmt.Errorf(
-		"failed to find unique VLAN ID after %d attempts (%d of %d IDs in use)",
-		maxVlanIDRetries, len(g.usedVlanIDs), MaxUniqueVlans,
-	)
+	// Slow path: sequential scan (guarantees finding a free ID).
+	for id := uint16(MinVlanID); id <= MaxVlanID; id++ {
+		if !g.usedVlanIDs[id] {
+			g.usedVlanIDs[id] = true
+			return id, nil
+		}
+	}
+
+	return 0, fmt.Errorf("VLAN ID pool exhausted: all %d IDs in use", MaxUniqueVlans)
 }
 
 // nextUniqueNetwork generates a unique RFC 1918 /24 network.

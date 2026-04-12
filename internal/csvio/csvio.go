@@ -110,7 +110,12 @@ func validateHeader(header []string) error {
 
 func parseVlanRecord(record []string, lineNum int) (generator.VlanConfig, error) {
 	if len(record) < len(vlanHeaders) {
-		return generator.VlanConfig{}, fmt.Errorf("line %d: expected 4 columns, got %d", lineNum, len(record))
+		return generator.VlanConfig{}, fmt.Errorf(
+			"line %d: expected %d columns, got %d",
+			lineNum,
+			len(vlanHeaders),
+			len(record),
+		)
 	}
 
 	vlanID, err := strconv.ParseUint(record[0], 10, 16)

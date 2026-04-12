@@ -8,7 +8,7 @@ opnConfigGenerator follows [Semantic Versioning 2.0.0](https://semver.org/):
 
 | Version Component | When to Increment                                  | Example                                         |
 | ----------------- | -------------------------------------------------- | ----------------------------------------------- |
-| **MAJOR** (X.0.0) | Breaking changes to CLI interface or output format | Removing a flag, changing CSV/XML output schema |
+| **MAJOR** (X.0.0) | Breaking changes to CLI or output format           | Removing a flag, changing CSV/XML output schema |
 | **MINOR** (0.X.0) | New features, backward-compatible additions        | New device type, new generator, new output flag |
 | **PATCH** (0.0.X) | Bug fixes, documentation, performance improvements | Fix VLAN collision, typo fixes                  |
 

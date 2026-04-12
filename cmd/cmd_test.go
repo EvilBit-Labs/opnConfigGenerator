@@ -175,13 +175,13 @@ func TestGenerateXMLRequiresBaseConfig(t *testing.T) {
 func TestGenerateXMLWithBaseConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	outPath := filepath.Join(tmpDir, "output.xml")
-	baseConfigPath := baseConfigPath(t)
+	baseCfgPath := baseConfigPath(t)
 
 	cmd := newTestRootCmd()
 	_, err := executeCommand(cmd,
 		"generate", "--format", "xml",
 		"--count", "3",
-		"--base-config", baseConfigPath,
+		"--base-config", baseCfgPath,
 		"--seed", "42",
 		"--output", outPath,
 	)
@@ -293,13 +293,13 @@ func TestGenerateFileExistsWithForce(t *testing.T) {
 func TestGenerateXMLWithFirewallRules(t *testing.T) {
 	tmpDir := t.TempDir()
 	outPath := filepath.Join(tmpDir, "fw.xml")
-	baseConfigPath := baseConfigPath(t)
+	baseCfgPath := baseConfigPath(t)
 
 	cmd := newTestRootCmd()
 	_, err := executeCommand(cmd,
 		"generate", "--format", "xml",
 		"--count", "3",
-		"--base-config", baseConfigPath,
+		"--base-config", baseCfgPath,
 		"--seed", "42",
 		"--include-firewall-rules",
 		"--output", outPath,
@@ -312,13 +312,13 @@ func TestGenerateXMLWithFirewallRules(t *testing.T) {
 }
 
 func TestGenerateXMLRejectsNatMappings(t *testing.T) {
-	baseConfigPath := baseConfigPath(t)
+	baseCfgPath := baseConfigPath(t)
 
 	cmd := newTestRootCmd()
 	_, err := executeCommand(cmd,
 		"generate", "--format", "xml",
 		"--count", "3",
-		"--base-config", baseConfigPath,
+		"--base-config", baseCfgPath,
 		"--nat-mappings", "5",
 	)
 	require.Error(t, err)
@@ -326,13 +326,13 @@ func TestGenerateXMLRejectsNatMappings(t *testing.T) {
 }
 
 func TestGenerateXMLRejectsVpnCount(t *testing.T) {
-	baseConfigPath := baseConfigPath(t)
+	baseCfgPath := baseConfigPath(t)
 
 	cmd := newTestRootCmd()
 	_, err := executeCommand(cmd,
 		"generate", "--format", "xml",
 		"--count", "3",
-		"--base-config", baseConfigPath,
+		"--base-config", baseCfgPath,
 		"--vpn-count", "2",
 	)
 	require.Error(t, err)

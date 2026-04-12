@@ -80,7 +80,7 @@ func (g *FirewallGenerator) intermediateRules(vlanID uint16, iface, vlanNet stri
 
 func (g *FirewallGenerator) advancedRules(vlan VlanConfig, iface string) []FirewallRule {
 	vlanNet := vlan.IPNetwork.String()
-	rules := make([]FirewallRule, 0, advancedRuleCount-intermediateRuleCount+1)
+	rules := make([]FirewallRule, 0, advancedRuleCount-intermediateRuleCount)
 
 	switch vlan.Department {
 	case DeptIT, DeptEngineering, DeptDevelopment:

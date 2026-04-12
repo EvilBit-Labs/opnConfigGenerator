@@ -12,7 +12,7 @@ import (
 func TestGenerateSingle(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVlanGenerator(new(int64(42)), generator.WanSingle)
+	gen := generator.NewVlanGenerator(int64Ptr(42), generator.WanSingle)
 	cfg, err := gen.GenerateSingle()
 	require.NoError(t, err)
 
@@ -43,7 +43,7 @@ func TestGenerateBatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			gen := generator.NewVlanGenerator(new(int64(42)), generator.WanSingle)
+			gen := generator.NewVlanGenerator(int64Ptr(42), generator.WanSingle)
 			configs, err := gen.GenerateBatch(tt.count)
 
 			if tt.wantErr {
@@ -60,7 +60,7 @@ func TestGenerateBatch(t *testing.T) {
 func TestVlanIDUniqueness(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVlanGenerator(new(int64(42)), generator.WanSingle)
+	gen := generator.NewVlanGenerator(int64Ptr(42), generator.WanSingle)
 	configs, err := gen.GenerateBatch(500)
 	require.NoError(t, err)
 
@@ -74,7 +74,7 @@ func TestVlanIDUniqueness(t *testing.T) {
 func TestNetworkUniqueness(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVlanGenerator(new(int64(42)), generator.WanSingle)
+	gen := generator.NewVlanGenerator(int64Ptr(42), generator.WanSingle)
 	configs, err := gen.GenerateBatch(500)
 	require.NoError(t, err)
 
@@ -89,7 +89,7 @@ func TestNetworkUniqueness(t *testing.T) {
 func TestAllNetworksRFC1918(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVlanGenerator(new(int64(42)), generator.WanSingle)
+	gen := generator.NewVlanGenerator(int64Ptr(42), generator.WanSingle)
 	configs, err := gen.GenerateBatch(200)
 	require.NoError(t, err)
 
@@ -102,7 +102,7 @@ func TestAllNetworksRFC1918(t *testing.T) {
 func TestAllVlanIDsInRange(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVlanGenerator(new(int64(42)), generator.WanSingle)
+	gen := generator.NewVlanGenerator(int64Ptr(42), generator.WanSingle)
 	configs, err := gen.GenerateBatch(200)
 	require.NoError(t, err)
 
@@ -115,8 +115,8 @@ func TestAllVlanIDsInRange(t *testing.T) {
 func TestDeterministicOutput(t *testing.T) {
 	t.Parallel()
 
-	gen1 := generator.NewVlanGenerator(new(int64(12345)), generator.WanSingle)
-	gen2 := generator.NewVlanGenerator(new(int64(12345)), generator.WanSingle)
+	gen1 := generator.NewVlanGenerator(int64Ptr(12345), generator.WanSingle)
+	gen2 := generator.NewVlanGenerator(int64Ptr(12345), generator.WanSingle)
 
 	configs1, err := gen1.GenerateBatch(10)
 	require.NoError(t, err)
@@ -135,7 +135,7 @@ func TestDeterministicOutput(t *testing.T) {
 func TestWanAssignmentSingle(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVlanGenerator(new(int64(42)), generator.WanSingle)
+	gen := generator.NewVlanGenerator(int64Ptr(42), generator.WanSingle)
 	configs, err := gen.GenerateBatch(10)
 	require.NoError(t, err)
 
@@ -147,7 +147,7 @@ func TestWanAssignmentSingle(t *testing.T) {
 func TestWanAssignmentMulti(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVlanGenerator(new(int64(42)), generator.WanMulti)
+	gen := generator.NewVlanGenerator(int64Ptr(42), generator.WanMulti)
 	configs, err := gen.GenerateBatch(9)
 	require.NoError(t, err)
 
@@ -160,7 +160,7 @@ func TestWanAssignmentMulti(t *testing.T) {
 func TestWanAssignmentBalanced(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVlanGenerator(new(int64(42)), generator.WanBalanced)
+	gen := generator.NewVlanGenerator(int64Ptr(42), generator.WanBalanced)
 	configs, err := gen.GenerateBatch(100)
 	require.NoError(t, err)
 
@@ -182,7 +182,7 @@ func TestMaxVlanGeneration(t *testing.T) {
 	}
 	t.Parallel()
 
-	gen := generator.NewVlanGenerator(new(int64(42)), generator.WanSingle)
+	gen := generator.NewVlanGenerator(int64Ptr(42), generator.WanSingle)
 	configs, err := gen.GenerateBatch(generator.MaxUniqueVlans)
 	require.NoError(t, err)
 	assert.Len(t, configs, generator.MaxUniqueVlans)
@@ -191,7 +191,7 @@ func TestMaxVlanGeneration(t *testing.T) {
 func TestDescriptionFormat(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVlanGenerator(new(int64(42)), generator.WanSingle)
+	gen := generator.NewVlanGenerator(int64Ptr(42), generator.WanSingle)
 	cfg, err := gen.GenerateSingle()
 	require.NoError(t, err)
 
@@ -202,7 +202,7 @@ func TestDescriptionFormat(t *testing.T) {
 func TestUsedCountTracking(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVlanGenerator(new(int64(42)), generator.WanSingle)
+	gen := generator.NewVlanGenerator(int64Ptr(42), generator.WanSingle)
 	assert.Equal(t, 0, gen.UsedVlanIDCount())
 	assert.Equal(t, 0, gen.UsedNetworkCount())
 

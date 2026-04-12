@@ -21,7 +21,7 @@ _null := if os_family() == "windows" { "nul" } else { "/dev/null" }
 
 # Act configuration
 act_arch := "linux/amd64"
-act_cmd := "act --container-architecture " + act_arch
+act_cmd := mise_exec + " act --container-architecture " + act_arch
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Default & Help
@@ -267,7 +267,7 @@ rebuild: clean build
 # Check GoReleaser configuration
 [group('release')]
 release-check:
-    @goreleaser check --verbose
+    @{{ mise_exec }} goreleaser check --verbose
 
 # Build snapshot (no tag required)
 [group('release')]

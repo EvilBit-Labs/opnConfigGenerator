@@ -52,8 +52,8 @@ Examples:
   # Generate CSV data
   opnConfigGenerator generate --format csv --count 50 --output network-data.csv
 
-  # Generate with VPN and NAT
-  opnConfigGenerator generate --format xml --count 15 --vpn-count 3 --nat-mappings 10`,
+  # Generate with VPN and NAT (CSV only — XML serialization pending)
+  opnConfigGenerator generate --format csv --count 15 --vpn-count 3 --nat-mappings 10`,
 	RunE: runGenerate,
 }
 
@@ -64,7 +64,7 @@ func init() {
 	}
 
 	//nolint:mnd // CLI flag default value
-	generateCmd.Flags().IntVarP(&count, "count", "c", 10, "number of VLANs to generate (1-10000)")
+	generateCmd.Flags().IntVarP(&count, "count", "c", 10, "number of VLANs to generate (1-4085)")
 	generateCmd.Flags().
 		StringVar(&baseConfig, "base-config", "", "base OPNsense XML template (required for xml format)")
 	generateCmd.Flags().StringVar(&csvFile, "csv-file", "", "read VLANs from existing CSV file")

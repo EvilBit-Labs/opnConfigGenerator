@@ -103,7 +103,7 @@ reviews:
         - Ensure test names clearly describe what is being tested
         - Confirm tests are shorter and simpler than implementation
         - Check that seeded tests produce deterministic results
-    - path: "*.go"
+    - path: "**/*.go"
       instructions: |-
         General Go code: Apply simplicity principles and Go idioms.
         - Prefer simple, straightforward implementations over abstractions
