@@ -192,15 +192,15 @@ cover: test-coverage
 bench:
     @{{ mise_exec }} go test -bench=. ./...
 
-# Run memory benchmarks for parser
+# Run memory benchmarks for generators
 [group('test')]
 bench-mem:
-    @{{ mise_exec }} go test -bench=BenchmarkParse -benchmem ./internal/parser
+    @{{ mise_exec }} go test -bench=. -benchmem ./internal/generator/...
 
 # Run comprehensive performance benchmarks
 [group('test')]
 bench-perf:
-    @{{ mise_exec }} go test -bench=. -run=^$ -benchtime=1s -count=3 ./internal/converter
+    @{{ mise_exec }} go test -bench=. -run=^$ -benchtime=1s -count=3 ./internal/opnsensegen/...
 
 # Save benchmark baseline for comparison
 [group('test')]
@@ -223,15 +223,15 @@ bench-compare:
 bench-startup:
     @{{ mise_exec }} go test -bench=BenchmarkStartup -run=^$ -benchmem ./cmd/...
 
-# Run pool benchmarks
+# Run network utility benchmarks
 [group('test')]
-bench-pool:
-    @{{ mise_exec }} go test -bench=. -run=^$ -benchmem ./internal/pool/...
+bench-netutil:
+    @{{ mise_exec }} go test -bench=. -run=^$ -benchmem ./internal/netutil/...
 
-# Run model completeness check
+# Run validation tests with verbose output
 [group('test')]
-completeness-check:
-    @{{ mise_exec }} go test -tags=completeness ./internal/model -run TestModelCompleteness
+validate-check:
+    @{{ mise_exec }} go test -v ./internal/validate/...
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Build
@@ -310,24 +310,10 @@ docs-build:
 docs-test:
     @{{ mise_exec }} uv run mkdocs build --verbose
 
-# Generate model reference documentation
+# Generate CLI documentation
 [group('docs')]
 generate-docs:
-    @{{ mise_exec }} go run tools/docgen/main.go
-
-# Regenerate VHS terminal demo GIFs from tape files
-[group('docs')]
-generate-demos:
-    @echo "Building opnConfigGenerator binary for demos..."
-    @{{ mise_exec }} go build -o vhs/opnConfigGenerator .
-    @mkdir -p vhs/gif vhs/screenshots
-    @set -e; \
-    trap 'rm -f vhs/opnConfigGenerator' EXIT; \
-    for tape in vhs/*.tape; do \
-        echo "Recording $tape..."; \
-        env -i HOME="$HOME" PATH="$PATH" TERM="xterm-256color" vhs "$tape"; \
-    done
-    @echo "Done — GIFs in vhs/gif/"
+    @echo "No docgen tool configured yet — use 'just run --help' to preview CLI docs"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Changelog
@@ -398,7 +384,7 @@ ci-check: check format-check lint test test-integration test-race
 [group('ci')]
 ci-smoke:
     @{{ mise_exec }} go build -trimpath -ldflags="-s -w -X main.version=dev" -v ./...
-    @{{ mise_exec }} go test -count=1 -failfast -short -timeout 5m ./cmd/... ./internal/config/...
+    @{{ mise_exec }} go test -count=1 -failfast -short -timeout 5m ./cmd/... ./internal/errors/...
 
 # Run full checks including security and release validation
 [group('ci')]
