@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<opnsense>
+  <version>1.0</version>
+  <system>
+    <hostname>opnsense</hostname>
+    <domain>localdomain</domain>
+  </system>
+  <vlans/>
+  <interfaces/>
+  <dhcpd/>
+  <filter/>
+  <nat/>
+  <openvpn/>
+  <wireguard/>
+  <ipsec/>
+</opnsense>
