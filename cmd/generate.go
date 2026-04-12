@@ -86,6 +86,12 @@ func init() {
 	generateCmd.Flags().StringVar(&wanAssignments, "wan-assignments", "single", "WAN strategy (single|multi|balanced)")
 }
 
+// CLI validation constants.
+const (
+	maxFirewallNr = 999
+	minOptCounter = 0
+)
+
 func runGenerate(_ *cobra.Command, _ []string) error {
 	normalizedFormat := normalizeStringFlag(format)
 
@@ -100,6 +106,26 @@ func runGenerate(_ *cobra.Command, _ []string) error {
 	// XML format requires base config.
 	if normalizedFormat == formatXML && baseConfig == "" {
 		return errors.New("--base-config is required for xml format")
+	}
+
+	// Validate count range.
+	if count <= 0 || count > generator.MaxUniqueVlans {
+		return fmt.Errorf("--count must be between 1 and %d, got %d", generator.MaxUniqueVlans, count)
+	}
+
+	// Validate firewallNr range.
+	if firewallNr < 1 || firewallNr > maxFirewallNr {
+		return fmt.Errorf("--firewall-nr must be between 1 and %d, got %d", maxFirewallNr, firewallNr)
+	}
+
+	// Validate optCounter range.
+	if optCounter < minOptCounter {
+		return fmt.Errorf("--opt-counter must be non-negative, got %d", optCounter)
+	}
+
+	// NAT and VPN injection into XML is not yet implemented.
+	if normalizedFormat == formatXML && (natMappings > 0 || vpnCount > 0) {
+		return errors.New("--nat-mappings and --vpn-count are not yet supported for XML output")
 	}
 
 	// Parse WAN assignment strategy.
@@ -145,43 +171,28 @@ func runGenerate(_ *cobra.Command, _ []string) error {
 		log.Info("generated firewall rules", "count", len(fwRules))
 	}
 
-	// Generate NAT mappings if requested.
-	var natMaps []generator.NatMapping
-	if natMappings > 0 {
-		natGen := generator.NewNatGenerator(seedPtr)
-		natMaps = natGen.GenerateMappings(vlans, natMappings)
-		log.Info("generated NAT mappings", "count", len(natMaps))
-	}
-
-	// Generate VPN configs if requested.
-	var vpnConfigs []generator.VpnConfig
-	if vpnCount > 0 {
-		vpnGen := generator.NewVpnGenerator(seedPtr)
-		vpnConfigs, err = vpnGen.GenerateConfigs(vpnCount)
-		if err != nil {
-			return fmt.Errorf("generate VPN configs: %w", err)
-		}
-		log.Info("generated VPN configs", "count", len(vpnConfigs))
-	}
-
 	// Output based on format.
 	switch normalizedFormat {
 	case formatCSV:
 		return outputCSV(vlans)
 	case formatXML:
-		return outputXML(vlans, fwRules, natMaps, vpnConfigs)
+		return outputXML(vlans, fwRules, seedPtr)
 	default:
 		return fmt.Errorf("unsupported format: %s", normalizedFormat)
 	}
 }
 
-func outputCSV(vlans []generator.VlanConfig) error {
+func outputCSV(vlans []generator.VlanConfig) (err error) {
 	w, needClose, err := getOutputWriter()
 	if err != nil {
 		return err
 	}
 	if needClose {
-		defer w.Close()
+		defer func() {
+			if cerr := w.Close(); cerr != nil && err == nil {
+				err = fmt.Errorf("close output file: %w", cerr)
+			}
+		}()
 	}
 
 	if err := csvio.WriteVlanCSV(w, vlans); err != nil {
@@ -195,9 +206,8 @@ func outputCSV(vlans []generator.VlanConfig) error {
 func outputXML(
 	vlans []generator.VlanConfig,
 	fwRules []generator.FirewallRule,
-	_ []generator.NatMapping,
-	_ []generator.VpnConfig,
-) error {
+	seedPtr *int64,
+) (err error) {
 	// Load base config.
 	cfg, err := opnsensegen.LoadBaseConfig(baseConfig)
 	if err != nil {
@@ -207,14 +217,20 @@ func outputXML(
 	// Inject generated data.
 	opnsensegen.InjectVlans(cfg, vlans, optCounter)
 
-	// Generate and inject DHCP configs.
-	//nolint:gosec // Deterministic fake data generation, not security-sensitive
-	rng := rand.New(rand.NewPCG(uint64(seed), 0))
+	// Generate and inject DHCP configs using same seed logic as other generators.
+	var rng *rand.Rand
+	if seedPtr != nil {
+		//nolint:gosec // Deterministic fake data generation, not security-sensitive
+		rng = rand.New(rand.NewPCG(uint64(*seedPtr), 0))
+	} else {
+		//nolint:gosec // Deterministic fake data generation, not security-sensitive
+		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+	}
 	dhcpConfigs := make([]generator.DhcpServerConfig, len(vlans))
 	for i, v := range vlans {
 		dhcpConfigs[i] = generator.DeriveDHCPConfig(v, rng)
 	}
-	opnsensegen.InjectDHCP(cfg, vlans, dhcpConfigs, optCounter)
+	opnsensegen.InjectDHCP(cfg, dhcpConfigs, optCounter)
 
 	// Inject firewall rules.
 	if len(fwRules) > 0 {
@@ -227,7 +243,11 @@ func outputXML(
 		return err
 	}
 	if needClose {
-		defer w.Close()
+		defer func() {
+			if cerr := w.Close(); cerr != nil && err == nil {
+				err = fmt.Errorf("close output file: %w", cerr)
+			}
+		}()
 	}
 
 	// Write output.

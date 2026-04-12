@@ -105,10 +105,10 @@ func executeCommand(root *cobra.Command, args ...string) (string, error) {
 	return stdoutBuf.String(), err
 }
 
-// testdataPath returns the absolute path to a file in the testdata directory.
-func testdataPath(t *testing.T, name string) string {
+// baseConfigPath returns the absolute path to the base-config.xml test fixture.
+func baseConfigPath(t *testing.T) string {
 	t.Helper()
-	abs, err := filepath.Abs(filepath.Join("..", "testdata", name))
+	abs, err := filepath.Abs(filepath.Join("..", "testdata", "base-config.xml"))
 	require.NoError(t, err)
 	return abs
 }
@@ -175,7 +175,7 @@ func TestGenerateXMLRequiresBaseConfig(t *testing.T) {
 func TestGenerateXMLWithBaseConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	outPath := filepath.Join(tmpDir, "output.xml")
-	baseConfigPath := testdataPath(t, "base-config.xml")
+	baseConfigPath := baseConfigPath(t)
 
 	cmd := newTestRootCmd()
 	_, err := executeCommand(cmd,
@@ -293,7 +293,7 @@ func TestGenerateFileExistsWithForce(t *testing.T) {
 func TestGenerateXMLWithFirewallRules(t *testing.T) {
 	tmpDir := t.TempDir()
 	outPath := filepath.Join(tmpDir, "fw.xml")
-	baseConfigPath := testdataPath(t, "base-config.xml")
+	baseConfigPath := baseConfigPath(t)
 
 	cmd := newTestRootCmd()
 	_, err := executeCommand(cmd,
@@ -309,6 +309,41 @@ func TestGenerateXMLWithFirewallRules(t *testing.T) {
 	data, err := os.ReadFile(outPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "<opnsense>")
+}
+
+func TestGenerateXMLRejectsNatMappings(t *testing.T) {
+	baseConfigPath := baseConfigPath(t)
+
+	cmd := newTestRootCmd()
+	_, err := executeCommand(cmd,
+		"generate", "--format", "xml",
+		"--count", "3",
+		"--base-config", baseConfigPath,
+		"--nat-mappings", "5",
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not yet supported")
+}
+
+func TestGenerateXMLRejectsVpnCount(t *testing.T) {
+	baseConfigPath := baseConfigPath(t)
+
+	cmd := newTestRootCmd()
+	_, err := executeCommand(cmd,
+		"generate", "--format", "xml",
+		"--count", "3",
+		"--base-config", baseConfigPath,
+		"--vpn-count", "2",
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not yet supported")
+}
+
+func TestGenerateInvalidCount(t *testing.T) {
+	cmd := newTestRootCmd()
+	_, err := executeCommand(cmd, "generate", "--format", "csv", "--count", "0")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--count must be between")
 }
 
 // --- Validate Command Tests ---

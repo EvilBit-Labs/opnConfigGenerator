@@ -17,6 +17,9 @@ import (
 	"github.com/EvilBit-Labs/opnDossier/pkg/schema/opnsense"
 )
 
+// defaultParentInterface is the default physical NIC for VLAN tagging.
+const defaultParentInterface = "igb0"
+
 // LoadBaseConfig reads and parses a base OPNsense config.xml file.
 func LoadBaseConfig(path string) (*opnsense.OpnSenseDocument, error) {
 	data, err := os.ReadFile(path)
@@ -48,7 +51,7 @@ func InjectVlans(cfg *opnsense.OpnSenseDocument, vlans []generator.VlanConfig, o
 		vlanIfName := fmt.Sprintf("vlan0.%d", v.VlanID)
 
 		cfg.VLANs.VLAN = append(cfg.VLANs.VLAN, opnsense.VLAN{
-			If:     "igb0",
+			If:     defaultParentInterface,
 			Tag:    strconv.FormatUint(uint64(v.VlanID), 10),
 			Descr:  v.Description,
 			Vlanif: vlanIfName,
@@ -60,7 +63,7 @@ func InjectVlans(cfg *opnsense.OpnSenseDocument, vlans []generator.VlanConfig, o
 			Descr:  v.Description,
 			If:     vlanIfName,
 			IPAddr: gateway.String(),
-			Subnet: "24",
+			Subnet: strconv.Itoa(v.IPNetwork.Bits()),
 		}
 	}
 }
@@ -68,7 +71,6 @@ func InjectVlans(cfg *opnsense.OpnSenseDocument, vlans []generator.VlanConfig, o
 // InjectDHCP adds generated DHCP configurations into the config.
 func InjectDHCP(
 	cfg *opnsense.OpnSenseDocument,
-	_ []generator.VlanConfig,
 	dhcpConfigs []generator.DhcpServerConfig,
 	optCounter int,
 ) {

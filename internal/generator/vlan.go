@@ -98,13 +98,16 @@ func (g *VlanGenerator) GenerateBatch(count int) ([]VlanConfig, error) {
 	return configs, nil
 }
 
+// maxVlanIDRetries is the maximum attempts to find a unique VLAN ID via random probing.
+const maxVlanIDRetries = 10000
+
 // nextUniqueVlanID generates a unique VLAN ID not already in use.
 func (g *VlanGenerator) nextUniqueVlanID() (uint16, error) {
 	if len(g.usedVlanIDs) >= MaxUniqueVlans {
 		return 0, fmt.Errorf("VLAN ID pool exhausted: all %d IDs in use", MaxUniqueVlans)
 	}
 
-	for {
+	for range maxVlanIDRetries {
 		//nolint:gosec // IntN(4085) yields 0-4084, adding MinVlanID stays within uint16
 		id := uint16(g.rng.IntN(MaxVlanID-MinVlanID+1)) + MinVlanID
 		if !g.usedVlanIDs[id] {
@@ -112,6 +115,11 @@ func (g *VlanGenerator) nextUniqueVlanID() (uint16, error) {
 			return id, nil
 		}
 	}
+
+	return 0, fmt.Errorf(
+		"failed to find unique VLAN ID after %d attempts (%d of %d IDs in use)",
+		maxVlanIDRetries, len(g.usedVlanIDs), MaxUniqueVlans,
+	)
 }
 
 // nextUniqueNetwork generates a unique RFC 1918 /24 network.

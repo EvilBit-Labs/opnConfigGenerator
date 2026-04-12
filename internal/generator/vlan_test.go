@@ -212,3 +212,34 @@ func TestUsedCountTracking(t *testing.T) {
 	assert.Equal(t, 5, gen.UsedVlanIDCount())
 	assert.Equal(t, 5, gen.UsedNetworkCount())
 }
+
+func TestParseWanAssignment(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected generator.WanAssignment
+		wantErr  bool
+	}{
+		{"single", "single", generator.WanSingle, false},
+		{"multi", "multi", generator.WanMulti, false},
+		{"balanced", "balanced", generator.WanBalanced, false},
+		{"invalid", "roundrobin", generator.WanSingle, true},
+		{"empty", "", generator.WanSingle, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := generator.ParseWanAssignment(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "must be single, multi, or balanced")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}

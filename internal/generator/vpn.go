@@ -8,6 +8,7 @@ import (
 	mathrand "math/rand/v2"
 	"net/netip"
 
+	"github.com/charmbracelet/log"
 	"github.com/google/uuid"
 )
 
@@ -213,7 +214,7 @@ func (g *VpnGenerator) UsedSubnets() []netip.Prefix {
 func generateFakeKey() string {
 	key := make([]byte, fakeKeySize)
 	if _, err := rand.Read(key); err != nil {
-		// Fall back to a deterministic placeholder if entropy is unavailable.
+		log.Warn("crypto/rand unavailable, using deterministic placeholder key", "error", err)
 		for i := range key {
 			key[i] = byte(i)
 		}

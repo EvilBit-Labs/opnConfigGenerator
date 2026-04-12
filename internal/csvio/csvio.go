@@ -26,7 +26,6 @@ func WriteVlanCSV(w io.Writer, vlans []generator.VlanConfig) error {
 	}
 
 	cw := csv.NewWriter(w)
-	defer cw.Flush()
 
 	// Write header row.
 	if err := cw.Write(vlanHeaders); err != nil {

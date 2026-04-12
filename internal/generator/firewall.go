@@ -138,12 +138,18 @@ func (g *FirewallGenerator) newRule(
 	}
 }
 
+// maxTrackerRetries is the maximum attempts to find a unique tracker value.
+const maxTrackerRetries = 1000
+
 func (g *FirewallGenerator) nextTracker() uint64 {
-	for {
+	for range maxTrackerRetries {
 		tracker := g.rng.Uint64()
 		if !g.usedTracker[tracker] {
 			g.usedTracker[tracker] = true
 			return tracker
 		}
 	}
+
+	// Extremely unlikely with uint64 space, but fail deterministically rather than loop forever.
+	panic("failed to generate unique tracker after maximum retries — possible RNG issue")
 }

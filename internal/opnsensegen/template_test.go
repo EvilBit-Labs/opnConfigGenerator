@@ -87,12 +87,21 @@ func TestInjectFirewallRules(t *testing.T) {
 			Source: "10.1.1.0/24", Destination: "any", Ports: "80,443",
 			Description: "Allow HTTP", Interface: "opt6", Tracker: 12345,
 		},
+		{
+			RuleID: "r2", Action: "block", Protocol: "any", Direction: "in",
+			Source: "any", Destination: "any", Ports: "any",
+			Description: "Block all", Interface: "opt6", Tracker: 67890, Log: true,
+		},
 	}
 
 	opnsensegen.InjectFirewallRules(cfg, rules)
-	assert.Len(t, cfg.Filter.Rule, 1)
+	assert.Len(t, cfg.Filter.Rule, 2)
 	assert.Equal(t, "pass", cfg.Filter.Rule[0].Type)
 	assert.Equal(t, "Allow HTTP", cfg.Filter.Rule[0].Descr)
+
+	// Verify "any" source path produces Source.Any field.
+	assert.NotNil(t, cfg.Filter.Rule[1].Source.Any, "source 'any' should set Any field")
+	assert.Empty(t, cfg.Filter.Rule[1].Source.Network, "source 'any' should not set Network")
 }
 
 func TestInjectDHCP(t *testing.T) {
@@ -116,7 +125,7 @@ func TestInjectDHCP(t *testing.T) {
 		generator.DeriveDHCPConfig(vlans[0], rng),
 	}
 
-	opnsensegen.InjectDHCP(cfg, vlans, dhcpConfigs, 6)
+	opnsensegen.InjectDHCP(cfg, dhcpConfigs, 6)
 
 	// Verify DHCP was added to the map.
 	assert.Len(t, cfg.Dhcpd.Items, 1)
