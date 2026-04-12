@@ -59,6 +59,7 @@ CLAUDE.md
 
 # Documentation build artifacts
 docs/plans/
+todos/
 
 # Logs
 *.log
