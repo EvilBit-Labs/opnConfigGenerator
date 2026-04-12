@@ -32,12 +32,15 @@ func DeriveDHCPConfig(vlan VlanConfig, rng *rand.Rand) DhcpServerConfig {
 	domainName := domainSafe(string(vlan.Department)) + ".local"
 	reservations := generateStaticReservations(vlan, rng)
 
+	//nolint:mnd // Max lease time is conventionally double the base lease time
+	maxLease := leaseTime * 2
+
 	return DhcpServerConfig{
 		Enabled:            true,
 		RangeStart:         rangeStart,
 		RangeEnd:           rangeEnd,
 		LeaseTime:          leaseTime,
-		MaxLeaseTime:       leaseTime * 2,
+		MaxLeaseTime:       maxLease,
 		DNSServers:         dnsServers,
 		DomainName:         domainName,
 		Gateway:            gateway,
@@ -45,6 +48,9 @@ func DeriveDHCPConfig(vlan VlanConfig, rng *rand.Rand) DhcpServerConfig {
 		StaticReservations: reservations,
 	}
 }
+
+// staticReservationHostOffset is the starting host IP offset for static DHCP reservations.
+const staticReservationHostOffset = 10
 
 func generateStaticReservations(vlan VlanConfig, rng *rand.Rand) []StaticReservation {
 	devices := vlan.Department.StaticReservationDevices()
@@ -54,7 +60,7 @@ func generateStaticReservations(vlan VlanConfig, rng *rand.Rand) []StaticReserva
 
 	reservations := make([]StaticReservation, 0, len(devices))
 	for i, device := range devices {
-		hostIP := netutil.HostIP(vlan.IPNetwork, uint8(10+i))
+		hostIP := netutil.HostIP(vlan.IPNetwork, uint8(staticReservationHostOffset+i))
 		mac := generateMAC(rng)
 		reservations = append(reservations, StaticReservation{
 			MAC:      mac,
@@ -66,11 +72,17 @@ func generateStaticReservations(vlan VlanConfig, rng *rand.Rand) []StaticReserva
 	return reservations
 }
 
+// macRandomByteRange is the number of possible values for a random MAC byte (0-255).
+const macRandomByteRange = 256
+
 func generateMAC(rng *rand.Rand) string {
 	return fmt.Sprintf("AA:BB:CC:%02X:%02X:%02X",
-		uint8(rng.IntN(256)),
-		uint8(rng.IntN(256)),
-		uint8(rng.IntN(256)),
+		//nolint:gosec // IntN(256) fits uint8 (0-255), no overflow possible
+		uint8(rng.IntN(macRandomByteRange)),
+		//nolint:gosec // IntN(256) fits uint8 (0-255), no overflow possible
+		uint8(rng.IntN(macRandomByteRange)),
+		//nolint:gosec // IntN(256) fits uint8 (0-255), no overflow possible
+		uint8(rng.IntN(macRandomByteRange)),
 	)
 }
 
@@ -80,7 +92,7 @@ func domainSafe(s string) string {
 		c := s[i]
 		switch {
 		case c >= 'A' && c <= 'Z':
-			result = append(result, c+32)
+			result = append(result, c+'a'-'A')
 		case c >= 'a' && c <= 'z', c >= '0' && c <= '9':
 			result = append(result, c)
 		case c == ' ':

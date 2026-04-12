@@ -35,7 +35,7 @@ func TestFirewallRuleCountPerComplexity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			gen := generator.NewFirewallGenerator(seedPtr(42))
+			gen := generator.NewFirewallGenerator(new(int64(42)))
 			vlan := makeVlan(100, generator.DeptSales)
 			rules := gen.GenerateRules(vlan, tt.complexity)
 			assert.Len(t, rules, tt.expected)
@@ -48,7 +48,7 @@ func TestFirewallRuleValidActions(t *testing.T) {
 
 	validActions := map[string]bool{"pass": true, "block": true}
 
-	gen := generator.NewFirewallGenerator(seedPtr(42))
+	gen := generator.NewFirewallGenerator(new(int64(42)))
 	vlan := makeVlan(100, generator.DeptIT)
 	rules := gen.GenerateRules(vlan, generator.FirewallAdvanced)
 
@@ -62,7 +62,7 @@ func TestFirewallRuleValidProtocols(t *testing.T) {
 
 	validProtocols := map[string]bool{"tcp": true, "udp": true, "icmp": true, "any": true}
 
-	gen := generator.NewFirewallGenerator(seedPtr(42))
+	gen := generator.NewFirewallGenerator(new(int64(42)))
 	vlan := makeVlan(100, generator.DeptIT)
 	rules := gen.GenerateRules(vlan, generator.FirewallAdvanced)
 
@@ -74,7 +74,7 @@ func TestFirewallRuleValidProtocols(t *testing.T) {
 func TestFirewallUniqueTrackers(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewFirewallGenerator(seedPtr(42))
+	gen := generator.NewFirewallGenerator(new(int64(42)))
 	vlans := []generator.VlanConfig{
 		makeVlan(100, generator.DeptIT),
 		makeVlan(200, generator.DeptSales),
@@ -93,7 +93,7 @@ func TestFirewallUniqueTrackers(t *testing.T) {
 func TestFirewallUniqueRuleIDs(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewFirewallGenerator(seedPtr(42))
+	gen := generator.NewFirewallGenerator(new(int64(42)))
 	vlans := []generator.VlanConfig{
 		makeVlan(100, generator.DeptIT),
 		makeVlan(200, generator.DeptSales),
@@ -111,7 +111,7 @@ func TestFirewallUniqueRuleIDs(t *testing.T) {
 func TestFirewallRulesReferenceCorrectInterface(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewFirewallGenerator(seedPtr(42))
+	gen := generator.NewFirewallGenerator(new(int64(42)))
 	vlan := makeVlan(42, generator.DeptIT)
 	rules := gen.GenerateRules(vlan, generator.FirewallBasic)
 
@@ -123,7 +123,7 @@ func TestFirewallRulesReferenceCorrectInterface(t *testing.T) {
 func TestFirewallBatchTotalRules(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewFirewallGenerator(seedPtr(42))
+	gen := generator.NewFirewallGenerator(new(int64(42)))
 	vlans := make([]generator.VlanConfig, 10)
 	for i := range vlans {
 		vlans[i] = makeVlan(uint16(100+i), generator.DeptSales)
@@ -164,7 +164,7 @@ func TestFirewallComplexityParsing(t *testing.T) {
 func TestFirewallAllRulesDirection(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewFirewallGenerator(seedPtr(42))
+	gen := generator.NewFirewallGenerator(new(int64(42)))
 	vlan := makeVlan(100, generator.DeptIT)
 	rules := gen.GenerateRules(vlan, generator.FirewallAdvanced)
 

@@ -64,42 +64,56 @@ const (
 	FirewallAdvanced
 )
 
+// Rule count constants for each firewall complexity level.
+const (
+	basicRuleCount        = 3
+	intermediateRuleCount = 7
+	advancedRuleCount     = 15
+)
+
 // RulesPerVlan returns the number of rules generated for this complexity level.
 func (c FirewallComplexity) RulesPerVlan() int {
 	switch c {
 	case FirewallBasic:
-		return 3
+		return basicRuleCount
 	case FirewallIntermediate:
-		return 7
+		return intermediateRuleCount
 	case FirewallAdvanced:
-		return 15
+		return advancedRuleCount
 	default:
-		return 3
+		return basicRuleCount
 	}
 }
+
+// Firewall complexity level string constants.
+const (
+	complexityBasic        = "basic"
+	complexityIntermediate = "intermediate"
+	complexityAdvanced     = "advanced"
+)
 
 // String returns the string representation of the complexity level.
 func (c FirewallComplexity) String() string {
 	switch c {
 	case FirewallBasic:
-		return "basic"
+		return complexityBasic
 	case FirewallIntermediate:
-		return "intermediate"
+		return complexityIntermediate
 	case FirewallAdvanced:
-		return "advanced"
+		return complexityAdvanced
 	default:
-		return "basic"
+		return complexityBasic
 	}
 }
 
 // ParseFirewallComplexity parses a string into a FirewallComplexity.
 func ParseFirewallComplexity(s string) (FirewallComplexity, error) {
 	switch s {
-	case "basic":
+	case complexityBasic:
 		return FirewallBasic, nil
-	case "intermediate":
+	case complexityIntermediate:
 		return FirewallIntermediate, nil
-	case "advanced":
+	case complexityAdvanced:
 		return FirewallAdvanced, nil
 	default:
 		return FirewallBasic, &InvalidComplexityError{Value: s}
@@ -118,6 +132,7 @@ func (e *InvalidComplexityError) Error() string {
 // NatRuleType identifies the kind of NAT rule to generate.
 type NatRuleType int
 
+// NatRuleType constants for all supported NAT rule types.
 const (
 	NatPortForward NatRuleType = iota
 	NatSourceNat

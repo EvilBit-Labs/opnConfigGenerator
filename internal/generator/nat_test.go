@@ -12,7 +12,7 @@ import (
 func TestNatGenerateMappings(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewNatGenerator(seedPtr(42))
+	gen := generator.NewNatGenerator(new(int64(42)))
 	vlans := []generator.VlanConfig{
 		{VlanID: 100, IPNetwork: netip.MustParsePrefix("10.1.1.0/24"), Department: generator.DeptIT},
 		{VlanID: 200, IPNetwork: netip.MustParsePrefix("10.1.2.0/24"), Department: generator.DeptSales},
@@ -25,7 +25,7 @@ func TestNatGenerateMappings(t *testing.T) {
 func TestNatMappingsDistributeAcrossVlans(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewNatGenerator(seedPtr(42))
+	gen := generator.NewNatGenerator(new(int64(42)))
 	vlans := []generator.VlanConfig{
 		{VlanID: 100, IPNetwork: netip.MustParsePrefix("10.1.1.0/24"), Department: generator.DeptIT},
 		{VlanID: 200, IPNetwork: netip.MustParsePrefix("10.1.2.0/24"), Department: generator.DeptSales},
@@ -44,7 +44,7 @@ func TestNatMappingsDistributeAcrossVlans(t *testing.T) {
 func TestNatMappingsUniqueIDs(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewNatGenerator(seedPtr(42))
+	gen := generator.NewNatGenerator(new(int64(42)))
 	vlans := []generator.VlanConfig{
 		{VlanID: 100, IPNetwork: netip.MustParsePrefix("10.1.1.0/24"), Department: generator.DeptIT},
 	}
@@ -60,7 +60,7 @@ func TestNatMappingsUniqueIDs(t *testing.T) {
 func TestNatMappingsHaveDescriptions(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewNatGenerator(seedPtr(42))
+	gen := generator.NewNatGenerator(new(int64(42)))
 	vlans := []generator.VlanConfig{
 		{VlanID: 100, IPNetwork: netip.MustParsePrefix("10.1.1.0/24"), Department: generator.DeptIT},
 	}
@@ -75,7 +75,7 @@ func TestNatMappingsHaveDescriptions(t *testing.T) {
 func TestNatZeroCountReturnsNil(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewNatGenerator(seedPtr(42))
+	gen := generator.NewNatGenerator(new(int64(42)))
 	vlans := []generator.VlanConfig{
 		{VlanID: 100, IPNetwork: netip.MustParsePrefix("10.1.1.0/24"), Department: generator.DeptIT},
 	}
@@ -88,7 +88,7 @@ func TestNatZeroCountReturnsNil(t *testing.T) {
 func TestNatRuleTypes(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewNatGenerator(seedPtr(42))
+	gen := generator.NewNatGenerator(new(int64(42)))
 	vlans := []generator.VlanConfig{
 		{VlanID: 100, IPNetwork: netip.MustParsePrefix("10.1.1.0/24"), Department: generator.DeptIT},
 	}
@@ -109,7 +109,7 @@ func TestNatRuleTypes(t *testing.T) {
 func TestNatPortForwardHasValidPorts(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewNatGenerator(seedPtr(42))
+	gen := generator.NewNatGenerator(new(int64(42)))
 	vlans := []generator.VlanConfig{
 		{VlanID: 100, IPNetwork: netip.MustParsePrefix("10.1.1.0/24"), Department: generator.DeptIT},
 	}

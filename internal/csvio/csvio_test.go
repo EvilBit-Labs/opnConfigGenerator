@@ -86,7 +86,7 @@ func TestReadCSVInvalidVlanID(t *testing.T) {
 
 	input := "VLAN,IP Range,Beschreibung,WAN\n5,10.1.1.0/24,test,1\n"
 	_, err := csvio.ReadVlanCSV(strings.NewReader(input))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "VLAN ID")
 }
 
@@ -95,7 +95,7 @@ func TestReadCSVInvalidNetwork(t *testing.T) {
 
 	input := "VLAN,IP Range,Beschreibung,WAN\n100,invalid,test,1\n"
 	_, err := csvio.ReadVlanCSV(strings.NewReader(input))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid network")
 }
 
@@ -104,7 +104,7 @@ func TestReadCSVEmptyDescription(t *testing.T) {
 
 	input := "VLAN,IP Range,Beschreibung,WAN\n100,10.1.1.0/24,,1\n"
 	_, err := csvio.ReadVlanCSV(strings.NewReader(input))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "description")
 }
 
@@ -113,7 +113,7 @@ func TestReadCSVInvalidWAN(t *testing.T) {
 
 	input := "VLAN,IP Range,Beschreibung,WAN\n100,10.1.1.0/24,test,5\n"
 	_, err := csvio.ReadVlanCSV(strings.NewReader(input))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "WAN assignment")
 }
 
@@ -122,7 +122,7 @@ func TestReadCSVWrongHeaders(t *testing.T) {
 
 	input := "ID,Network,Name,WAN\n100,10.1.1.0/24,test,1\n"
 	_, err := csvio.ReadVlanCSV(strings.NewReader(input))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "header")
 }
 

@@ -33,12 +33,13 @@ Features:
   • Create NAT rules and port forwards
   • Support for various output formats (XML, CSV)
   • Configurable generation parameters`,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRun: func(_ *cobra.Command, _ []string) {
 		// Set up logging based on flags and environment
 		setupLogging()
 	},
 }
 
+// Execute runs the root command with the given version string.
 func Execute(version string) error {
 	rootCmd.Version = version
 	return rootCmd.Execute()

@@ -14,6 +14,7 @@ import (
 // VpnType represents the type of VPN configuration.
 type VpnType int
 
+// VPN type constants for all supported VPN protocols.
 const (
 	VpnOpenVPN VpnType = iota
 	VpnWireGuard
@@ -55,8 +56,10 @@ type VpnGenerator struct {
 func NewVpnGenerator(seed *int64) *VpnGenerator {
 	var rng *mathrand.Rand
 	if seed != nil {
+		//nolint:gosec // Deterministic fake data generation, not security-sensitive
 		rng = mathrand.New(mathrand.NewPCG(uint64(*seed), 0))
 	} else {
+		//nolint:gosec // Deterministic fake data generation, not security-sensitive
 		rng = mathrand.New(mathrand.NewPCG(mathrand.Uint64(), mathrand.Uint64()))
 	}
 
@@ -75,7 +78,7 @@ func (g *VpnGenerator) GenerateConfigs(count int) ([]VpnConfig, error) {
 
 	configs := make([]VpnConfig, 0, count)
 	for range count {
-		vpnType := VpnType(g.rng.IntN(3))
+		vpnType := VpnType(g.rng.IntN(vpnTypeCount))
 		cfg, err := g.generateConfig(vpnType)
 		if err != nil {
 			return nil, err
@@ -122,8 +125,23 @@ func (g *VpnGenerator) generateConfig(vpnType VpnType) (VpnConfig, error) {
 	}
 }
 
+// VPN generation constants for port ranges and protocol parameters.
+const (
+	ovpnBasePort    = 1194
+	ovpnPortRange   = 100
+	wgBasePort      = 51820
+	wgPortRange     = 100
+	vpnTypeCount    = 3
+	ipsecPort       = 500
+	ipsecIKEVersion = 2
+	ipsecDHGroup    = 14
+	maxTunnelOctet  = 254
+	tunnelPrefix    = 24
+	fakeKeySize     = 32
+)
+
 func (g *VpnGenerator) openVPNConfig(tunnel netip.Prefix) VpnConfig {
-	port := 1194 + g.rng.IntN(100)
+	port := ovpnBasePort + g.rng.IntN(ovpnPortRange)
 	return VpnConfig{
 		ID:            uuid.NewString(),
 		Type:          VpnOpenVPN,
@@ -138,7 +156,7 @@ func (g *VpnGenerator) openVPNConfig(tunnel netip.Prefix) VpnConfig {
 }
 
 func (g *VpnGenerator) wireGuardConfig(tunnel netip.Prefix) VpnConfig {
-	port := 51820 + g.rng.IntN(100)
+	port := wgBasePort + g.rng.IntN(wgPortRange)
 	pubKey := generateFakeKey()
 	return VpnConfig{
 		ID:            uuid.NewString(),
@@ -159,23 +177,23 @@ func (g *VpnGenerator) ipsecConfig(tunnel netip.Prefix) VpnConfig {
 		Type:          VpnIPSec,
 		Name:          fmt.Sprintf("ipsec-%s", tunnel.Addr()),
 		TunnelNetwork: tunnel,
-		Port:          500,
+		Port:          ipsecPort,
 		Protocol:      "esp",
 		Description:   fmt.Sprintf("IPSec tunnel to %s", tunnel),
-		IKEVersion:    2,
-		DHGroup:       14,
+		IKEVersion:    ipsecIKEVersion,
+		DHGroup:       ipsecDHGroup,
 		HashAlgo:      "sha256",
 	}
 }
 
 // nextTunnelSubnet generates a unique tunnel /24 in the 10.200.x.0 range.
 func (g *VpnGenerator) nextTunnelSubnet() (netip.Prefix, error) {
-	if g.tunnelBase > 254 {
+	if g.tunnelBase > maxTunnelOctet {
 		return netip.Prefix{}, errors.New("tunnel subnet pool exhausted")
 	}
 
 	addr := netip.AddrFrom4([4]byte{10, 200, g.tunnelBase, 0})
-	prefix := netip.PrefixFrom(addr, 24)
+	prefix := netip.PrefixFrom(addr, tunnelPrefix)
 	g.tunnelBase++
 	g.usedSubnets[prefix] = true
 
@@ -193,7 +211,7 @@ func (g *VpnGenerator) UsedSubnets() []netip.Prefix {
 
 // generateFakeKey produces a base64-encoded 32-byte fake key.
 func generateFakeKey() string {
-	key := make([]byte, 32)
+	key := make([]byte, fakeKeySize)
 	if _, err := rand.Read(key); err != nil {
 		// Fall back to a deterministic placeholder if entropy is unavailable.
 		for i := range key {

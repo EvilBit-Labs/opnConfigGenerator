@@ -29,6 +29,11 @@ type ConfigError struct {
 	Cause   error
 }
 
+// NewConfigError creates a ConfigError with a kind and message.
+func NewConfigError(kind error, message string) *ConfigError {
+	return &ConfigError{Kind: kind, Message: message}
+}
+
 func (e *ConfigError) Error() string {
 	if e.Cause != nil {
 		return fmt.Sprintf("%s: %s: %v", e.Kind, e.Message, e.Cause)
@@ -42,11 +47,6 @@ func (e *ConfigError) Unwrap() error {
 	return e.Kind
 }
 
-// NewConfigError creates a ConfigError with a kind and message.
-func NewConfigError(kind error, message string) *ConfigError {
-	return &ConfigError{Kind: kind, Message: message}
-}
-
 // WrapConfigError creates a ConfigError wrapping an underlying cause.
 func WrapConfigError(kind error, message string, cause error) *ConfigError {
 	return &ConfigError{Kind: kind, Message: message, Cause: cause}
@@ -55,6 +55,7 @@ func WrapConfigError(kind error, message string, cause error) *ConfigError {
 // VlanErrorKind identifies the specific type of VLAN error.
 type VlanErrorKind int
 
+// VlanErrorKind constants for categorizing VLAN-specific errors.
 const (
 	ErrInvalidVlanID VlanErrorKind = iota
 	ErrNonRFC1918Network
@@ -72,13 +73,13 @@ type VlanError struct {
 	Message string
 }
 
-func (e *VlanError) Error() string {
-	return e.Message
-}
-
 // NewVlanError creates a VlanError with a kind and message.
 func NewVlanError(kind VlanErrorKind, message string) *VlanError {
 	return &VlanError{Kind: kind, Message: message}
+}
+
+func (e *VlanError) Error() string {
+	return e.Message
 }
 
 // InvalidVlanID creates an error for a VLAN ID outside the valid range.

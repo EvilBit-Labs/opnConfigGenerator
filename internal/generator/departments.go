@@ -1,3 +1,4 @@
+// Package generator produces realistic fake OPNsense configuration data.
 package generator
 
 import "math/rand/v2"
@@ -5,6 +6,7 @@ import "math/rand/v2"
 // Department represents a network department for VLAN naming.
 type Department string
 
+// Department constants for all supported network departments.
 const (
 	DeptSales           Department = "Sales"
 	DeptIT              Department = "IT"
@@ -61,17 +63,24 @@ func (d Department) LeaseTime() int {
 	}
 }
 
+// Static DHCP reservation counts per department type.
+const (
+	reservationsHigh   = 3 // IT: printer, NAS, server
+	reservationsMedium = 2 // Engineering/Security: build-server or camera
+	reservationsLow    = 1 // Management/Finance: single device
+)
+
 // StaticReservationCount returns how many static DHCP reservations a department gets.
 func (d Department) StaticReservationCount() int {
 	switch d {
 	case DeptIT:
-		return 3 // printer, NAS, server
+		return reservationsHigh
 	case DeptEngineering, DeptSecurity:
-		return 2 // build-server/CI-runner or camera/access-controller
+		return reservationsMedium
 	case DeptDevelopment, DeptQA:
-		return 2
+		return reservationsMedium
 	case DeptManagement, DeptFinance:
-		return 1
+		return reservationsLow
 	default:
 		return 0
 	}

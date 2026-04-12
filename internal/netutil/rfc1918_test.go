@@ -83,6 +83,7 @@ func TestIsRFC1918Addr(t *testing.T) {
 
 func TestGenerateRandomNetwork(t *testing.T) {
 	// Test with seeded RNG for deterministic output
+	//nolint:gosec // Deterministic fake data generation, not security-sensitive
 	rng := rand.New(rand.NewPCG(42, 1337))
 
 	// Generate multiple networks and verify they're all RFC 1918
@@ -98,6 +99,7 @@ func TestGenerateRandomNetwork(t *testing.T) {
 }
 
 func TestGenerateRandomNetworkDistribution(t *testing.T) {
+	//nolint:gosec // Deterministic fake data generation, not security-sensitive
 	rng := rand.New(rand.NewPCG(42, 1337))
 	const iterations = 1000
 
@@ -109,11 +111,12 @@ func TestGenerateRandomNetworkDistribution(t *testing.T) {
 		network := netutil.GenerateRandomNetwork(rng)
 		addr := network.Addr()
 
-		if netutil.ClassA.Contains(addr) {
+		switch {
+		case netutil.ClassA.Contains(addr):
 			classACount++
-		} else if netutil.ClassB.Contains(addr) {
+		case netutil.ClassB.Contains(addr):
 			classBCount++
-		} else if netutil.ClassC.Contains(addr) {
+		case netutil.ClassC.Contains(addr):
 			classCCount++
 		}
 	}
@@ -271,7 +274,9 @@ func TestDeterministicGeneration(t *testing.T) {
 	seed1 := uint64(12345)
 	seed2 := uint64(67890)
 
+	//nolint:gosec // Deterministic fake data generation, not security-sensitive
 	rng1a := rand.New(rand.NewPCG(seed1, seed2))
+	//nolint:gosec // Deterministic fake data generation, not security-sensitive
 	rng1b := rand.New(rand.NewPCG(seed1, seed2))
 
 	network1a := netutil.GenerateRandomNetwork(rng1a)
@@ -285,7 +290,9 @@ func TestDeterministicGeneration(t *testing.T) {
 	// Generate multiple values to increase chance of difference
 	same := true
 	for i := range 10 {
+		//nolint:gosec // Deterministic fake data generation, not security-sensitive
 		rng1c := rand.New(rand.NewPCG(seed1, seed2))
+		//nolint:gosec // Deterministic fake data generation, not security-sensitive
 		rng2c := rand.New(rand.NewPCG(seed2, seed1))
 
 		// Skip to position i
