@@ -6,7 +6,7 @@ require (
 	github.com/charmbracelet/log v0.4.0
 	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.8.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 )
 
 require (
