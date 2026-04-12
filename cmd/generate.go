@@ -7,10 +7,17 @@ import (
 
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/csvio"
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/generator"
+	"github.com/EvilBit-Labs/opnConfigGenerator/internal/opnsensegen"
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/validate"
-	"github.com/EvilBit-Labs/opnConfigGenerator/internal/xmlgen"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
+)
+
+const (
+	// formatXML is the XML output format identifier.
+	formatXML = "xml"
+	// formatCSV is the CSV output format identifier.
+	formatCSV = "csv"
 )
 
 var (
@@ -52,14 +59,18 @@ Examples:
 
 func init() {
 	generateCmd.Flags().StringVar(&format, "format", "", "output format (csv|xml)")
-	_ = generateCmd.MarkFlagRequired("format")
+	if err := generateCmd.MarkFlagRequired("format"); err != nil {
+		panic(fmt.Sprintf("failed to mark format flag required: %v", err))
+	}
 
+	//nolint:mnd // CLI flag default value
 	generateCmd.Flags().IntVarP(&count, "count", "c", 10, "number of VLANs to generate (1-10000)")
 	generateCmd.Flags().
 		StringVar(&baseConfig, "base-config", "", "base OPNsense XML template (required for xml format)")
 	generateCmd.Flags().StringVar(&csvFile, "csv-file", "", "read VLANs from existing CSV file")
 
 	generateCmd.Flags().IntVar(&firewallNr, "firewall-nr", 1, "firewall instance number (1-999)")
+	//nolint:mnd // CLI flag default value
 	generateCmd.Flags().IntVar(&optCounter, "opt-counter", 6, "starting interface counter")
 
 	generateCmd.Flags().BoolVar(&force, "force", false, "overwrite existing output files")
@@ -80,14 +91,14 @@ func runGenerate(_ *cobra.Command, _ []string) error {
 
 	// Validate format.
 	switch normalizedFormat {
-	case "csv", "xml":
+	case formatCSV, formatXML:
 		// Valid.
 	default:
 		return fmt.Errorf("invalid format %q: must be csv or xml", format)
 	}
 
 	// XML format requires base config.
-	if normalizedFormat == "xml" && baseConfig == "" {
+	if normalizedFormat == formatXML && baseConfig == "" {
 		return errors.New("--base-config is required for xml format")
 	}
 
@@ -119,7 +130,7 @@ func runGenerate(_ *cobra.Command, _ []string) error {
 	}
 
 	// Validate VLANs.
-	result := validate.ValidateVlans(vlans)
+	result := validate.Vlans(vlans)
 	if !result.IsValid() {
 		return result.Error()
 	}
@@ -155,9 +166,9 @@ func runGenerate(_ *cobra.Command, _ []string) error {
 
 	// Output based on format.
 	switch normalizedFormat {
-	case "csv":
+	case formatCSV:
 		return outputCSV(vlans)
-	case "xml":
+	case formatXML:
 		return outputXML(vlans, fwRules, natMaps, vpnConfigs)
 	default:
 		return fmt.Errorf("unsupported format: %s", normalizedFormat)
@@ -188,25 +199,26 @@ func outputXML(
 	_ []generator.VpnConfig,
 ) error {
 	// Load base config.
-	cfg, err := xmlgen.LoadBaseConfig(baseConfig)
+	cfg, err := opnsensegen.LoadBaseConfig(baseConfig)
 	if err != nil {
 		return fmt.Errorf("load base config: %w", err)
 	}
 
 	// Inject generated data.
-	xmlgen.InjectVlans(cfg, vlans, optCounter)
+	opnsensegen.InjectVlans(cfg, vlans, optCounter)
 
 	// Generate and inject DHCP configs.
+	//nolint:gosec // Deterministic fake data generation, not security-sensitive
 	rng := rand.New(rand.NewPCG(uint64(seed), 0))
 	dhcpConfigs := make([]generator.DhcpServerConfig, len(vlans))
 	for i, v := range vlans {
 		dhcpConfigs[i] = generator.DeriveDHCPConfig(v, rng)
 	}
-	xmlgen.InjectDHCP(cfg, vlans, dhcpConfigs, optCounter)
+	opnsensegen.InjectDHCP(cfg, vlans, dhcpConfigs, optCounter)
 
 	// Inject firewall rules.
 	if len(fwRules) > 0 {
-		xmlgen.InjectFirewallRules(cfg, fwRules)
+		opnsensegen.InjectFirewallRules(cfg, fwRules)
 	}
 
 	// Get output writer.
@@ -219,7 +231,7 @@ func outputXML(
 	}
 
 	// Write output.
-	if err := xmlgen.MarshalConfig(cfg, w); err != nil {
+	if err := opnsensegen.MarshalConfig(cfg, w); err != nil {
 		return fmt.Errorf("write XML: %w", err)
 	}
 

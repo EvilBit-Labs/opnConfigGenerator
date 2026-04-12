@@ -1,4 +1,4 @@
-package xmlgen_test
+package opnsensegen_test
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/generator"
-	"github.com/EvilBit-Labs/opnConfigGenerator/internal/xmlgen"
+	"github.com/EvilBit-Labs/opnConfigGenerator/internal/opnsensegen"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +16,7 @@ import (
 func TestLoadBaseConfig(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := xmlgen.LoadBaseConfig("../../testdata/base-config.xml")
+	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
 	require.NoError(t, err)
 
 	assert.Equal(t, "1.0", cfg.Version)
@@ -40,7 +40,7 @@ func TestParseConfig(t *testing.T) {
   <filter/>
 </opnsense>`)
 
-	cfg, err := xmlgen.ParseConfig(xmlData)
+	cfg, err := opnsensegen.ParseConfig(xmlData)
 	require.NoError(t, err)
 	assert.Equal(t, "test", cfg.System.Hostname)
 }
@@ -48,7 +48,7 @@ func TestParseConfig(t *testing.T) {
 func TestInjectVlans(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := xmlgen.LoadBaseConfig("../../testdata/base-config.xml")
+	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
 	require.NoError(t, err)
 
 	vlans := []generator.VlanConfig{
@@ -61,20 +61,24 @@ func TestInjectVlans(t *testing.T) {
 		},
 	}
 
-	xmlgen.InjectVlans(cfg, vlans, 6)
+	opnsensegen.InjectVlans(cfg, vlans, 6)
 
-	assert.Len(t, cfg.VLANs.VLANs, 2)
-	assert.Equal(t, uint16(42), cfg.VLANs.VLANs[0].Tag)
-	assert.Equal(t, "IT VLAN 42", cfg.VLANs.VLANs[0].Descr)
-	assert.Len(t, cfg.Interfaces.Entries, 2)
-	assert.Equal(t, "opt6", cfg.Interfaces.Entries[0].XMLName.Local)
-	assert.Equal(t, "10.42.7.1", cfg.Interfaces.Entries[0].IPAddr)
+	assert.Len(t, cfg.VLANs.VLAN, 2)
+	assert.Equal(t, "42", cfg.VLANs.VLAN[0].Tag)
+	assert.Equal(t, "IT VLAN 42", cfg.VLANs.VLAN[0].Descr)
+
+	// Verify interfaces were added to the map.
+	assert.Len(t, cfg.Interfaces.Items, 2)
+	opt6, ok := cfg.Interfaces.Items["opt6"]
+	require.True(t, ok)
+	assert.Equal(t, "10.42.7.1", opt6.IPAddr)
+	assert.Equal(t, "IT VLAN 42", opt6.Descr)
 }
 
 func TestInjectFirewallRules(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := xmlgen.LoadBaseConfig("../../testdata/base-config.xml")
+	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
 	require.NoError(t, err)
 
 	rules := []generator.FirewallRule{
@@ -85,18 +89,19 @@ func TestInjectFirewallRules(t *testing.T) {
 		},
 	}
 
-	xmlgen.InjectFirewallRules(cfg, rules)
-	assert.Len(t, cfg.Filter.Rules, 1)
-	assert.Equal(t, "pass", cfg.Filter.Rules[0].Type)
-	assert.Equal(t, "Allow HTTP", cfg.Filter.Rules[0].Descr)
+	opnsensegen.InjectFirewallRules(cfg, rules)
+	assert.Len(t, cfg.Filter.Rule, 1)
+	assert.Equal(t, "pass", cfg.Filter.Rule[0].Type)
+	assert.Equal(t, "Allow HTTP", cfg.Filter.Rule[0].Descr)
 }
 
 func TestInjectDHCP(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := xmlgen.LoadBaseConfig("../../testdata/base-config.xml")
+	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
 	require.NoError(t, err)
 
+	//nolint:gosec // Deterministic fake data generation, not security-sensitive
 	rng := rand.New(rand.NewPCG(42, 0))
 	vlans := []generator.VlanConfig{
 		{
@@ -111,18 +116,23 @@ func TestInjectDHCP(t *testing.T) {
 		generator.DeriveDHCPConfig(vlans[0], rng),
 	}
 
-	xmlgen.InjectDHCP(cfg, vlans, dhcpConfigs, 6)
-	assert.Len(t, cfg.Dhcpd.Entries, 1)
+	opnsensegen.InjectDHCP(cfg, vlans, dhcpConfigs, 6)
+
+	// Verify DHCP was added to the map.
+	assert.Len(t, cfg.Dhcpd.Items, 1)
+	dhcpIface, ok := cfg.Dhcpd.Items["opt6"]
+	require.True(t, ok)
+	assert.Equal(t, "1", dhcpIface.Enable)
 }
 
 func TestMarshalRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := xmlgen.LoadBaseConfig("../../testdata/base-config.xml")
+	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	err = xmlgen.MarshalConfig(cfg, &buf)
+	err = opnsensegen.MarshalConfig(cfg, &buf)
 	require.NoError(t, err)
 
 	output := buf.String()
@@ -135,17 +145,17 @@ func TestMarshalRoundTrip(t *testing.T) {
 func TestMarshalWithInjectedData(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := xmlgen.LoadBaseConfig("../../testdata/base-config.xml")
+	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
 	require.NoError(t, err)
 
 	vlans := []generator.VlanConfig{
 		{VlanID: 42, IPNetwork: netip.MustParsePrefix("10.42.7.0/24"), Description: "IT VLAN 42", WanAssignment: 1},
 	}
 
-	xmlgen.InjectVlans(cfg, vlans, 6)
+	opnsensegen.InjectVlans(cfg, vlans, 6)
 
 	var buf bytes.Buffer
-	err = xmlgen.MarshalConfig(cfg, &buf)
+	err = opnsensegen.MarshalConfig(cfg, &buf)
 	require.NoError(t, err)
 
 	output := buf.String()
@@ -157,7 +167,7 @@ func TestMarshalWithInjectedData(t *testing.T) {
 func TestMarshalXMLEscaping(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := xmlgen.LoadBaseConfig("../../testdata/base-config.xml")
+	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
 	require.NoError(t, err)
 
 	vlans := []generator.VlanConfig{
@@ -169,10 +179,10 @@ func TestMarshalXMLEscaping(t *testing.T) {
 		},
 	}
 
-	xmlgen.InjectVlans(cfg, vlans, 6)
+	opnsensegen.InjectVlans(cfg, vlans, 6)
 
 	var buf bytes.Buffer
-	err = xmlgen.MarshalConfig(cfg, &buf)
+	err = opnsensegen.MarshalConfig(cfg, &buf)
 	require.NoError(t, err)
 
 	output := buf.String()
