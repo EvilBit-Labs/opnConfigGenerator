@@ -7,11 +7,13 @@ import (
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/netutil"
 )
 
-// DefaultNTPServers are the NTP servers assigned to DHCP configurations.
-var DefaultNTPServers = []string{
-	"0.pool.ntp.org",
-	"1.pool.ntp.org",
-	"2.pool.ntp.org",
+// defaultNTPServers returns the NTP servers assigned to DHCP configurations.
+func defaultNTPServers() []string {
+	return []string{
+		"0.pool.ntp.org",
+		"1.pool.ntp.org",
+		"2.pool.ntp.org",
+	}
 }
 
 // DeriveDHCPConfig computes a DHCP server configuration from a VLAN config.
@@ -39,7 +41,7 @@ func DeriveDHCPConfig(vlan VlanConfig, rng *rand.Rand) DhcpServerConfig {
 		DNSServers:         dnsServers,
 		DomainName:         domainName,
 		Gateway:            gateway,
-		NTPServers:         DefaultNTPServers,
+		NTPServers:         defaultNTPServers(),
 		StaticReservations: reservations,
 	}
 }

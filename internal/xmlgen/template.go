@@ -228,7 +228,7 @@ func InjectVlans(cfg *OpnSenseConfig, vlans []generator.VlanConfig, optCounter i
 }
 
 // InjectDHCP adds generated DHCP configurations into the config.
-func InjectDHCP(cfg *OpnSenseConfig, vlans []generator.VlanConfig, dhcpConfigs []generator.DhcpServerConfig, optCounter int) {
+func InjectDHCP(cfg *OpnSenseConfig, _ []generator.VlanConfig, dhcpConfigs []generator.DhcpServerConfig, optCounter int) {
 	for i, dhcp := range dhcpConfigs {
 		ifName := fmt.Sprintf("opt%d", optCounter+i)
 		cfg.Dhcpd.Entries = append(cfg.Dhcpd.Entries, DhcpdEntry{

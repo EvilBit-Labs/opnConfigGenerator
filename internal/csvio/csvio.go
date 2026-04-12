@@ -3,6 +3,7 @@ package csvio
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"net/netip"
@@ -66,7 +67,7 @@ func ReadVlanCSV(r io.Reader) ([]generator.VlanConfig, error) {
 	var vlans []generator.VlanConfig
 	for lineNum := 2; ; lineNum++ {
 		record, err := cr.Read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -89,13 +90,18 @@ func validateHeader(header []string) error {
 		return fmt.Errorf("CSV header has %d columns, expected %d", len(header), len(vlanHeaders))
 	}
 
-	// Strip UTF-8 BOM from first field if present.
-	if len(header[0]) >= 3 && header[0][:3] == string(utf8BOM) {
-		header[0] = header[0][3:]
+	// Strip UTF-8 BOM from first field if present (use local copy to avoid mutating caller).
+	first := header[0]
+	if len(first) >= 3 && first[:3] == string(utf8BOM) {
+		first = first[3:]
 	}
 
 	for i, expected := range vlanHeaders {
-		if header[i] != expected {
+		actual := header[i]
+		if i == 0 {
+			actual = first
+		}
+		if actual != expected {
 			return fmt.Errorf("CSV header column %d: got %q, expected %q", i, header[i], expected)
 		}
 	}

@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"math/rand/v2"
-	"os"
 
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/csvio"
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/generator"
@@ -225,22 +224,3 @@ func outputXML(
 	return nil
 }
 
-func outputFilePath(nr int) string {
-	if output != "" {
-		return output
-	}
-	return fmt.Sprintf("firewall_%d_config.xml", nr)
-}
-
-// checkOutputFile checks if the output file exists and returns an error if --force isn't set.
-func checkOutputFile(path string) error {
-	if force {
-		return nil
-	}
-
-	if _, err := os.Stat(path); err == nil {
-		return fmt.Errorf("output file %q already exists (use --force to overwrite)", path)
-	}
-
-	return nil
-}

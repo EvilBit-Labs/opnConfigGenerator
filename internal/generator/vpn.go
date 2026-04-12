@@ -193,6 +193,11 @@ func (g *VpnGenerator) UsedSubnets() []netip.Prefix {
 // generateFakeKey produces a base64-encoded 32-byte fake key.
 func generateFakeKey() string {
 	key := make([]byte, 32)
-	_, _ = rand.Read(key)
+	if _, err := rand.Read(key); err != nil {
+		// Fall back to a deterministic placeholder if entropy is unavailable.
+		for i := range key {
+			key[i] = byte(i)
+		}
+	}
 	return base64.StdEncoding.EncodeToString(key)
 }

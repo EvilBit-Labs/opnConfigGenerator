@@ -77,10 +77,18 @@ func setupLogging() {
 	log.SetDefault(logger)
 }
 
-// getOutputWriter returns the appropriate output destination
+// getOutputWriter returns the appropriate output destination.
+// If an output file is specified and --force is not set, it checks for existing files first.
 func getOutputWriter() (*os.File, bool, error) {
 	if output == "" {
 		return os.Stdout, false, nil
+	}
+
+	// Check if file exists when --force is not set.
+	if !force {
+		if _, err := os.Stat(output); err == nil {
+			return nil, false, fmt.Errorf("output file %q already exists (use --force to overwrite)", output)
+		}
 	}
 
 	file, err := os.Create(output)
