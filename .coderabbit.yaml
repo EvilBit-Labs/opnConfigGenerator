@@ -1,0 +1,305 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+tone_instructions: >-
+  Focus on mock data quality, opnDossier schema consistency, multi-device readiness, CLI usability,
+  deterministic reproducibility, and idiomatic Go. Configs are for testing, not production.
+early_access: true
+reviews:
+  profile: assertive
+  request_changes_workflow: true
+  high_level_summary_in_walkthrough: true
+  auto_title_instructions: "Use conventional commit format: <type>(<scope>): <description>"
+  collapse_walkthrough: false
+  labeling_instructions:
+    - label: type:feature
+      instructions: Use for new functionality and enhancements
+    - label: type:bug
+      instructions: Use for bug fixes and defect corrections
+    - label: priority:critical
+      instructions: Use for critical issues and urgent fixes
+    - label: priority:high
+      instructions: Use for high priority issues and important features
+    - label: priority:normal
+      instructions: Use for standard work and regular features
+    - label: go
+      instructions: Use for Go code changes and modifications
+    - label: dependencies
+      instructions: Use for dependency updates and package changes
+    - label: documentation
+      instructions: Use for documentation improvements and updates
+    - label: testing
+      instructions: Use for test-related changes and test infrastructure
+    - label: performance
+      instructions: Use for performance optimizations and improvements
+    - label: ci
+      instructions: Use for CI/CD and GitHub Actions changes
+    - label: breaking_change
+      instructions: Use for incompatible changes and major updates
+    - label: generator
+      instructions: Use for data generator changes (VLAN, DHCP, firewall, NAT, VPN)
+    - label: schema
+      instructions: Use for opnDossier schema integration or device-specific serializer changes
+    - label: new-device
+      instructions: Use for adding support for new device types (pfSense, etc.)
+  auto_apply_labels: true
+  auto_assign_reviewers: true
+  path_instructions:
+    - path: cmd/**/*.go
+      instructions: |-
+        CLI command files: Focus on user experience, clear error messages, and proper flag handling.
+        - Verify cobra command structure and flag definitions are correct
+        - Ensure error messages are actionable and user-friendly
+        - Confirm help text is clear and follows CLI conventions
+        - Check that --seed produces deterministic, reproducible output
+        - Verify exit codes follow the documented contract (0/1/2/3)
+    - path: internal/generator/**/*.go
+      instructions: |-
+        Data generators: Core value of the tool — realistic, valid, unique mock data.
+        - Verify generated data is unique (no duplicate VLAN IDs, no overlapping subnets)
+        - Check RFC 1918 compliance for all generated networks
+        - Ensure seeded RNG produces deterministic output
+        - Validate department-based configuration is realistic
+        - Confirm firewall rule counts match complexity level contracts
+        - Check that generators are device-agnostic (don't embed OPNsense-specific XML)
+    - path: internal/opnsensegen/**/*.go
+      instructions: |-
+        OPNsense serializer: Converts generator output to OPNsense config.xml using opnDossier schema.
+        - Verify opnDossier schema types are used correctly (not duplicated locally)
+        - Check XML marshal/unmarshal round-trip preservation
+        - Ensure injection functions populate all required schema fields
+        - Validate that Source/Destination "any" handling matches OPNsense conventions
+        - This is a device-specific package — future devices (pfSense) get their own packages
+    - path: internal/netutil/**/*.go
+      instructions: |-
+        Network utilities: RFC 1918 address generation and validation.
+        - Verify all generated addresses fall within RFC 1918 ranges
+        - Check weighted distribution is correct (60% A, 25% B, 15% C)
+        - Ensure deterministic output with seeded RNG
+        - Validate edge cases at class boundaries
+    - path: internal/validate/**/*.go
+      instructions: |-
+        Cross-object validation: Ensure generated configs are internally consistent.
+        - Check validation catches duplicate VLAN IDs and overlapping subnets
+        - Verify interface reference validation is correct
+        - Ensure VPN/VLAN subnet overlap detection works
+        - Keep validations meaningful — avoid over-engineering
+    - path: internal/csvio/**/*.go
+      instructions: |-
+        CSV I/O: German-header CSV format for backward compatibility with Rust tool.
+        - Verify UTF-8 BOM is written for Excel compatibility
+        - Check German headers match expected format exactly
+        - Ensure round-trip (write then read) produces identical data
+        - Validate error handling for malformed CSV input
+    - path: internal/errors/**/*.go
+      instructions: |-
+        Error types: Typed errors for errors.As() matching.
+        - Verify error types implement the error interface correctly
+        - Check that error messages include actionable context
+        - Ensure error kinds are exhaustive for their domain
+    - path: "**/*_test.go"
+      instructions: |-
+        Test files: Follow test proportionality principles — meaningful tests only.
+        - Verify tests cover critical functionality and real edge cases
+        - Check table-driven tests are well-organized and clear
+        - Ensure test names clearly describe what is being tested
+        - Confirm tests are shorter and simpler than implementation
+        - Check that seeded tests produce deterministic results
+    - path: "*.go"
+      instructions: |-
+        General Go code: Apply simplicity principles and Go idioms.
+        - Prefer simple, straightforward implementations over abstractions
+        - Use standard library patterns over custom frameworks
+        - Keep functions focused and single-purpose
+        - Validate error handling is appropriate (not defensive programming)
+        - Confirm code follows Go conventions and idioms
+  slop_detection:
+    label: slop
+  auto_review:
+    ignore_title_keywords:
+      - WIP
+    base_branches:
+      - main
+    ignore_usernames:
+      - dependabot[bot]
+      - dosubot[bot]
+  finishing_touches:
+    unit_tests:
+      enabled: false
+    simplify:
+      enabled: true
+  pre_merge_checks:
+    title:
+      requirements: Must follow conventional commit format
+  tools:
+    ruff:
+      enabled: false
+    github-checks:
+      timeout_ms: 300000
+    biome:
+      enabled: false
+    swiftlint:
+      enabled: false
+    phpstan:
+      enabled: false
+    phpmd:
+      enabled: false
+    phpcs:
+      enabled: false
+    detekt:
+      enabled: false
+    eslint:
+      enabled: false
+    flake8:
+      enabled: false
+    rubocop:
+      enabled: false
+    buf:
+      enabled: false
+    regal:
+      enabled: false
+    pmd:
+      enabled: false
+    cppcheck:
+      enabled: false
+    clippy:
+      enabled: false
+    sqlfluff:
+      enabled: false
+    prismaLint:
+      enabled: false
+    pylint:
+      enabled: false
+    oxc:
+      enabled: false
+    shopifyThemeCheck:
+      enabled: false
+    luacheck:
+      enabled: false
+    brakeman:
+      enabled: false
+    htmlhint:
+      enabled: false
+chat:
+  allow_non_org_members: false
+  integrations:
+    jira:
+      usage: enabled
+    linear:
+      usage: disabled
+knowledge_base:
+  code_guidelines:
+    filePatterns:
+      - "**/*.go"
+      - "**/*.md"
+      - "**/justfile"
+      - "**/*.yaml"
+      - "**/*.yml"
+  jira:
+    usage: enabled
+    project_keys:
+      - NATS
+  linear:
+    usage: disabled
+code_generation:
+  docstrings:
+    path_instructions:
+      - path: cmd/**/*.go
+        instructions: |-
+          CLI commands require clear, user-focused documentation.
+          - Document what the command does from user perspective
+          - Include usage examples with common flags
+          - Explain error conditions users might encounter
+          - Keep it concise — avoid implementation details
+          - Follow Go doc comment conventions
+      - path: internal/**/*.go
+        instructions: |-
+          Internal package documentation should explain purpose and usage.
+          - Focus on package-level documentation explaining domain
+          - Document exported functions/types with purpose and usage
+          - Include examples for complex APIs
+          - Explain non-obvious behavior or edge cases
+          - Avoid documenting trivial getters/setters
+      - path: "**/*_test.go"
+        instructions: |-
+          Test documentation should explain what is being validated.
+          - Use descriptive test function names instead of excessive comments
+          - Document table-driven test structure when complex
+          - Explain test fixtures or mock setup when non-obvious
+          - Avoid redundant documentation for self-explanatory tests
+  unit_tests:
+    path_instructions:
+      - path: cmd/**/*.go
+        instructions: |-
+          CLI command tests: Focus on integration scenarios and error handling.
+          - Test flag parsing and validation
+          - Verify error messages for invalid inputs
+          - Use table-driven tests for multiple input scenarios
+          - Avoid testing cobra framework behavior
+          - Keep tests simpler than implementation
+      - path: internal/generator/**/*.go
+        instructions: |-
+          Generator tests: Critical for correctness — deterministic output, uniqueness, validity.
+          - Test with seeded RNG for deterministic output
+          - Verify uniqueness constraints (VLAN IDs, networks, trackers)
+          - Test boundary conditions (pool exhaustion, max counts)
+          - Use table-driven tests for department/complexity variations
+          - Avoid testing random distribution beyond sanity checks
+      - path: internal/opnsensegen/**/*.go
+        instructions: |-
+          Serializer tests: Verify correct mapping to opnDossier schema types.
+          - Test XML round-trip preservation of base config
+          - Verify injection populates correct schema fields
+          - Test special character escaping in XML output
+          - Use testdata fixtures for sample configs
+          - Focus on serialization correctness, not generator logic
+      - path: internal/validate/**/*.go
+        instructions: |-
+          Validator tests: Verify meaningful validation rules only.
+          - Test validation rules catch real configuration errors
+          - Use table-driven tests for different error scenarios
+          - Test cross-field validation logic
+          - Verify error messages are specific and helpful
+          - Keep test count proportional to complexity
+issue_enrichment:
+  auto_enrich:
+    enabled: true
+  planning:
+    enabled: false
+    auto_planning:
+      enabled: false
+  labeling:
+    labeling_instructions:
+      - label: type:feature
+        instructions: Use for new functionality, generators, device support, or enhancements
+      - label: type:bug
+        instructions: Use for bug fixes, incorrect output, or unexpected behavior
+      - label: enhancement
+        instructions: Use for improvements to existing generators, optimizations, or incremental enhancements
+      - label: priority:critical
+        instructions: Use for critical issues, data correctness bugs, or blocking production issues
+      - label: priority:high
+        instructions: Use for high priority issues that impact generation quality or user experience
+      - label: priority:normal
+        instructions: Use for standard work items and routine features
+      - label: go
+        instructions: Use for Go code changes or modifications to .go files
+      - label: cli
+        instructions: Use for CLI improvements, flag handling, or user experience enhancements
+      - label: generator
+        instructions: Use for data generator changes (VLAN, DHCP, firewall, NAT, VPN)
+      - label: schema
+        instructions: Use for opnDossier schema integration or device-specific serializer work
+      - label: new-device
+        instructions: Use for adding support for new device types (pfSense, etc.)
+      - label: dependencies
+        instructions: Use for dependency updates, package upgrades, or go.mod changes
+      - label: ci
+        instructions: Use for CI/CD pipeline changes, GitHub Actions, or build process modifications
+      - label: documentation
+        instructions: Use for documentation improvements, README updates, or usage examples
+      - label: testing
+        instructions: Use for test infrastructure, coverage improvements, or test-related changes
+      - label: performance
+        instructions: Use for throughput optimizations, memory usage, or efficiency improvements
+      - label: breaking_change
+        instructions: Use for incompatible changes to CLI flags, output format, or public API
+    auto_apply_labels: true
