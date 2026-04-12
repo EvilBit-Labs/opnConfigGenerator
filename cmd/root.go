@@ -15,7 +15,7 @@ var (
 	output  string
 )
 
-// rootCmd represents the base command when called without any subcommands
+// rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
 	Use:   "opnConfigGenerator",
 	Short: "Generate realistic OPNsense configuration files with fake data",
@@ -99,7 +99,7 @@ func getOutputWriter() (*os.File, bool, error) {
 	return file, true, nil
 }
 
-// normalizeStringFlag normalizes string flags by trimming whitespace and converting to lowercase
+// normalizeStringFlag normalizes string flags by trimming whitespace and converting to lowercase.
 func normalizeStringFlag(value string) string {
 	return strings.TrimSpace(strings.ToLower(value))
 }

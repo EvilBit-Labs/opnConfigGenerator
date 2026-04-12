@@ -86,7 +86,7 @@ func TestGenerateRandomNetwork(t *testing.T) {
 	rng := rand.New(rand.NewPCG(42, 1337))
 
 	// Generate multiple networks and verify they're all RFC 1918
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		network := netutil.GenerateRandomNetwork(rng)
 		if !netutil.IsRFC1918(network) {
 			t.Errorf("GenerateRandomNetwork() generated non-RFC 1918 network: %s", network)
@@ -105,7 +105,7 @@ func TestGenerateRandomNetworkDistribution(t *testing.T) {
 	classBCount := 0
 	classCCount := 0
 
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		network := netutil.GenerateRandomNetwork(rng)
 		addr := network.Addr()
 
@@ -284,12 +284,12 @@ func TestDeterministicGeneration(t *testing.T) {
 	// Test that different seeds produce different sequences
 	// Generate multiple values to increase chance of difference
 	same := true
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		rng1c := rand.New(rand.NewPCG(seed1, seed2))
 		rng2c := rand.New(rand.NewPCG(seed2, seed1))
 
 		// Skip to position i
-		for j := 0; j < i; j++ {
+		for range i {
 			netutil.GenerateRandomNetwork(rng1c)
 			netutil.GenerateRandomNetwork(rng2c)
 		}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"net/netip"
+	"strconv"
 
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/netutil"
 	"github.com/google/uuid"
@@ -118,7 +119,7 @@ func (g *NatGenerator) destinationNat(vlan VlanConfig, target netip.Addr) NatMap
 		SourceAddr:  "any",
 		SourcePort:  "any",
 		DestAddr:    "wan_ip",
-		DestPort:    fmt.Sprintf("%d", 8000+g.rng.IntN(1000)),
+		DestPort:    strconv.Itoa(8000 + g.rng.IntN(1000)),
 		TargetAddr:  target.String(),
 		TargetPort:  "443",
 		Description: fmt.Sprintf("Destination NAT to %s (VLAN %d)", target, vlan.VlanID),

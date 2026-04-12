@@ -174,7 +174,7 @@ func TestWanAssignmentBalanced(t *testing.T) {
 	}
 
 	for wan := uint8(1); wan <= 3; wan++ {
-		assert.Greater(t, counts[wan], 0, "WAN %d should have at least one assignment", wan)
+		assert.Positive(t, counts[wan], "WAN %d should have at least one assignment", wan)
 	}
 }
 

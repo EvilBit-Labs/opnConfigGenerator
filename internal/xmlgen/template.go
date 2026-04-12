@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/generator"
@@ -15,24 +16,24 @@ import (
 // OpnSenseConfig is a simplified representation of the config.xml structure
 // for injection purposes. In production, this would use opnDossier's schema types.
 type OpnSenseConfig struct {
-	XMLName    xml.Name        `xml:"opnsense"`
-	Version    string          `xml:"version"`
-	System     SystemConfig    `xml:"system"`
-	VLANs      VLANSection     `xml:"vlans"`
+	XMLName    xml.Name         `xml:"opnsense"`
+	Version    string           `xml:"version"`
+	System     SystemConfig     `xml:"system"`
+	VLANs      VLANSection      `xml:"vlans"`
 	Interfaces InterfaceSection `xml:"interfaces"`
-	Dhcpd      DhcpdSection    `xml:"dhcpd"`
-	Filter     FilterSection   `xml:"filter"`
-	Nat        NatSection      `xml:"nat"`
-	OpenVPN    OpenVPNSection  `xml:"openvpn"`
+	Dhcpd      DhcpdSection     `xml:"dhcpd"`
+	Filter     FilterSection    `xml:"filter"`
+	Nat        NatSection       `xml:"nat"`
+	OpenVPN    OpenVPNSection   `xml:"openvpn"`
 	WireGuard  WireGuardSection `xml:"wireguard"`
-	IPSec      IPSecSection    `xml:"ipsec"`
-	Extra      []XMLExtra      `xml:",any"`
+	IPSec      IPSecSection     `xml:"ipsec"`
+	Extra      []XMLExtra       `xml:",any"`
 }
 
 // SystemConfig holds basic system configuration.
 type SystemConfig struct {
-	Hostname string `xml:"hostname"`
-	Domain   string `xml:"domain"`
+	Hostname string     `xml:"hostname"`
+	Domain   string     `xml:"domain"`
 	Extra    []XMLExtra `xml:",any"`
 }
 
@@ -77,14 +78,14 @@ type DhcpdSection struct {
 
 // DhcpdEntry is DHCP config for a single interface.
 type DhcpdEntry struct {
-	XMLName xml.Name
-	Enable  string         `xml:"enable,omitempty"`
-	Range   DHCPRange      `xml:"range,omitempty"`
-	Gateway string         `xml:"gateway,omitempty"`
-	Domain  string         `xml:"domain,omitempty"`
-	DNS1    string         `xml:"dnsserver,omitempty"`
-	Lease   string         `xml:"defaultleasetime,omitempty"`
-	MaxLease string        `xml:"maxleasetime,omitempty"`
+	XMLName  xml.Name
+	Enable   string    `xml:"enable,omitempty"`
+	Range    DHCPRange `xml:"range,omitempty"`
+	Gateway  string    `xml:"gateway,omitempty"`
+	Domain   string    `xml:"domain,omitempty"`
+	DNS1     string    `xml:"dnsserver,omitempty"`
+	Lease    string    `xml:"defaultleasetime,omitempty"`
+	MaxLease string    `xml:"maxleasetime,omitempty"`
 }
 
 // DHCPRange defines a DHCP address range.
@@ -100,16 +101,16 @@ type FilterSection struct {
 
 // FilterRule is a single firewall rule.
 type FilterRule struct {
-	Type        string `xml:"type"`
-	Descr       string `xml:"descr"`
-	Interface   string `xml:"interface"`
-	IPProtocol  string `xml:"ipprotocol"`
-	Protocol    string `xml:"protocol,omitempty"`
+	Type        string  `xml:"type"`
+	Descr       string  `xml:"descr"`
+	Interface   string  `xml:"interface"`
+	IPProtocol  string  `xml:"ipprotocol"`
+	Protocol    string  `xml:"protocol,omitempty"`
 	Source      RuleSrc `xml:"source"`
 	Destination RuleDst `xml:"destination"`
-	Log         string `xml:"log,omitempty"`
-	Direction   string `xml:"direction,omitempty"`
-	Tracker     string `xml:"tracker"`
+	Log         string  `xml:"log,omitempty"`
+	Direction   string  `xml:"direction,omitempty"`
+	Tracker     string  `xml:"tracker"`
 }
 
 // RuleSrc is the source specification of a firewall rule.
@@ -143,7 +144,7 @@ type NatRule struct {
 	Interface string `xml:"interface"`
 	Protocol  string `xml:"protocol,omitempty"`
 	Source    string `xml:"source,omitempty"`
-	Target   string `xml:"target,omitempty"`
+	Target    string `xml:"target,omitempty"`
 }
 
 // OpenVPNSection holds OpenVPN server configurations.
@@ -228,18 +229,23 @@ func InjectVlans(cfg *OpnSenseConfig, vlans []generator.VlanConfig, optCounter i
 }
 
 // InjectDHCP adds generated DHCP configurations into the config.
-func InjectDHCP(cfg *OpnSenseConfig, _ []generator.VlanConfig, dhcpConfigs []generator.DhcpServerConfig, optCounter int) {
+func InjectDHCP(
+	cfg *OpnSenseConfig,
+	_ []generator.VlanConfig,
+	dhcpConfigs []generator.DhcpServerConfig,
+	optCounter int,
+) {
 	for i, dhcp := range dhcpConfigs {
 		ifName := fmt.Sprintf("opt%d", optCounter+i)
 		cfg.Dhcpd.Entries = append(cfg.Dhcpd.Entries, DhcpdEntry{
-			XMLName: xml.Name{Local: ifName},
-			Enable:  "1",
-			Range:   DHCPRange{From: dhcp.RangeStart.String(), To: dhcp.RangeEnd.String()},
-			Gateway: dhcp.Gateway.String(),
-			Domain:  dhcp.DomainName,
-			DNS1:    strings.Join(dhcp.DNSServers, ","),
-			Lease:   fmt.Sprintf("%d", dhcp.LeaseTime),
-			MaxLease: fmt.Sprintf("%d", dhcp.MaxLeaseTime),
+			XMLName:  xml.Name{Local: ifName},
+			Enable:   "1",
+			Range:    DHCPRange{From: dhcp.RangeStart.String(), To: dhcp.RangeEnd.String()},
+			Gateway:  dhcp.Gateway.String(),
+			Domain:   dhcp.DomainName,
+			DNS1:     strings.Join(dhcp.DNSServers, ","),
+			Lease:    strconv.Itoa(dhcp.LeaseTime),
+			MaxLease: strconv.Itoa(dhcp.MaxLeaseTime),
 		})
 	}
 }
@@ -279,7 +285,7 @@ func InjectFirewallRules(cfg *OpnSenseConfig, rules []generator.FirewallRule) {
 			Destination: dst,
 			Log:         logStr,
 			Direction:   r.Direction,
-			Tracker:     fmt.Sprintf("%d", r.Tracker),
+			Tracker:     strconv.FormatUint(r.Tracker, 10),
 		})
 	}
 }

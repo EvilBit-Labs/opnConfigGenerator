@@ -17,8 +17,18 @@ func TestWriteAndReadRoundTrip(t *testing.T) {
 
 	vlans := []generator.VlanConfig{
 		{VlanID: 42, IPNetwork: netip.MustParsePrefix("10.42.0.0/24"), Description: "IT VLAN 42", WanAssignment: 1},
-		{VlanID: 100, IPNetwork: netip.MustParsePrefix("10.100.0.0/24"), Description: "Sales VLAN 100", WanAssignment: 2},
-		{VlanID: 200, IPNetwork: netip.MustParsePrefix("172.16.5.0/24"), Description: "Engineering VLAN 200", WanAssignment: 3},
+		{
+			VlanID:        100,
+			IPNetwork:     netip.MustParsePrefix("10.100.0.0/24"),
+			Description:   "Sales VLAN 100",
+			WanAssignment: 2,
+		},
+		{
+			VlanID:        200,
+			IPNetwork:     netip.MustParsePrefix("172.16.5.0/24"),
+			Description:   "Engineering VLAN 200",
+			WanAssignment: 3,
+		},
 	}
 
 	var buf bytes.Buffer

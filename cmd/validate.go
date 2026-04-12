@@ -1,18 +1,18 @@
 package cmd
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/spf13/cobra"
 )
 
 var (
-	inputFile  string
+	inputFile   string
 	inputFormat string
-	maxErrors  int
+	maxErrors   int
 )
 
-// validateCmd represents the validate command
+// validateCmd represents the validate command.
 var validateCmd = &cobra.Command{
 	Use:   "validate",
 	Short: "Validate OPNsense configuration files",
@@ -39,7 +39,7 @@ Examples:
   # Limit error reporting
   opnConfigGenerator validate --input config.xml --max-errors 5`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return fmt.Errorf("validate command not yet implemented")
+		return errors.New("validate command not yet implemented")
 	},
 }
 

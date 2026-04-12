@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"math/rand/v2"
 
@@ -54,7 +55,8 @@ func init() {
 	_ = generateCmd.MarkFlagRequired("format")
 
 	generateCmd.Flags().IntVarP(&count, "count", "c", 10, "number of VLANs to generate (1-10000)")
-	generateCmd.Flags().StringVar(&baseConfig, "base-config", "", "base OPNsense XML template (required for xml format)")
+	generateCmd.Flags().
+		StringVar(&baseConfig, "base-config", "", "base OPNsense XML template (required for xml format)")
 	generateCmd.Flags().StringVar(&csvFile, "csv-file", "", "read VLANs from existing CSV file")
 
 	generateCmd.Flags().IntVar(&firewallNr, "firewall-nr", 1, "firewall instance number (1-999)")
@@ -64,7 +66,8 @@ func init() {
 	generateCmd.Flags().Int64Var(&seed, "seed", 0, "RNG seed for reproducibility (0 = random)")
 
 	generateCmd.Flags().BoolVar(&includeFirewallRules, "include-firewall-rules", false, "generate firewall rules")
-	generateCmd.Flags().StringVar(&firewallRuleComplexity, "firewall-rule-complexity", "basic", "complexity (basic|intermediate|advanced)")
+	generateCmd.Flags().
+		StringVar(&firewallRuleComplexity, "firewall-rule-complexity", "basic", "complexity (basic|intermediate|advanced)")
 
 	generateCmd.Flags().StringVar(&vlanRange, "vlan-range", "", "VLAN range spec (e.g., '100-150,200-250')")
 	generateCmd.Flags().IntVar(&vpnCount, "vpn-count", 0, "number of VPN configurations")
@@ -85,7 +88,7 @@ func runGenerate(_ *cobra.Command, _ []string) error {
 
 	// XML format requires base config.
 	if normalizedFormat == "xml" && baseConfig == "" {
-		return fmt.Errorf("--base-config is required for xml format")
+		return errors.New("--base-config is required for xml format")
 	}
 
 	// Parse WAN assignment strategy.
@@ -223,4 +226,3 @@ func outputXML(
 	log.Info("wrote XML output", "vlans", len(vlans), "rules", len(fwRules))
 	return nil
 }
-

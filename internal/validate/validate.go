@@ -37,8 +37,16 @@ func ValidateVlans(vlans []generator.VlanConfig) ValidationResult {
 	for i, v := range vlans {
 		// VLAN ID range check.
 		if v.VlanID < generator.MinVlanID || v.VlanID > generator.MaxVlanID {
-			result.Errors = append(result.Errors,
-				fmt.Sprintf("VLAN[%d]: ID %d outside range %d-%d", i, v.VlanID, generator.MinVlanID, generator.MaxVlanID))
+			result.Errors = append(
+				result.Errors,
+				fmt.Sprintf(
+					"VLAN[%d]: ID %d outside range %d-%d",
+					i,
+					v.VlanID,
+					generator.MinVlanID,
+					generator.MaxVlanID,
+				),
+			)
 		}
 
 		// VLAN ID uniqueness.
@@ -120,7 +128,7 @@ func ValidateFirewallRules(rules []generator.FirewallRule, validInterfaces map[s
 }
 
 // ValidateNoSubnetOverlap checks that VPN tunnel subnets don't overlap with VLAN subnets.
-func ValidateNoSubnetOverlap(vlanNets []netip.Prefix, vpnNets []netip.Prefix) ValidationResult {
+func ValidateNoSubnetOverlap(vlanNets, vpnNets []netip.Prefix) ValidationResult {
 	var result ValidationResult
 
 	for _, vpn := range vpnNets {

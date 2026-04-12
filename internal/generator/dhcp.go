@@ -29,7 +29,7 @@ func DeriveDHCPConfig(vlan VlanConfig, rng *rand.Rand) DhcpServerConfig {
 		"1.1.1.1",
 	}
 
-	domainName := fmt.Sprintf("%s.local", domainSafe(string(vlan.Department)))
+	domainName := domainSafe(string(vlan.Department)) + ".local"
 	reservations := generateStaticReservations(vlan, rng)
 
 	return DhcpServerConfig{

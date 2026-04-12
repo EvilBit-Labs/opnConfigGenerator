@@ -41,10 +41,10 @@ func TestDepartmentCount(t *testing.T) {
 
 func TestDepartmentLeaseTime(t *testing.T) {
 	tests := []struct {
-		name       string
-		dept       generator.Department
-		expected   int
-		category   string
+		name     string
+		dept     generator.Department
+		expected int
+		category string
 	}{
 		// Corporate departments (24h)
 		{"IT corporate", generator.DeptIT, generator.LeaseTimeCorporate, "corporate"},
@@ -146,7 +146,7 @@ func TestRandomDepartment(t *testing.T) {
 
 	// Generate multiple departments and verify they're all valid
 	seenDepts := make(map[generator.Department]bool)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		dept := generator.RandomDepartment(rng)
 		if !slices.Contains(generator.AllDepartments, dept) {
 			t.Errorf("RandomDepartment() returned invalid department: %s", dept)
@@ -179,7 +179,7 @@ func TestRandomDepartmentDeterministic(t *testing.T) {
 	rng2a := rand.New(rand.NewPCG(seed1, seed2))
 	rng2b := rand.New(rand.NewPCG(seed1, seed2))
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		deptA := generator.RandomDepartment(rng2a)
 		deptB := generator.RandomDepartment(rng2b)
 		if deptA != deptB {
@@ -249,7 +249,7 @@ func TestAllDepartmentsHaveValidReservationCounts(t *testing.T) {
 	}
 }
 
-// Helper function to compare slices
+// Helper function to compare slices.
 func slicesEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

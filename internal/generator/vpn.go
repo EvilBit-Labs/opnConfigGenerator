@@ -3,6 +3,7 @@ package generator
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	mathrand "math/rand/v2"
 	"net/netip"
@@ -34,7 +35,7 @@ type VpnConfig struct {
 	TLSAuth bool
 
 	// WireGuard-specific fields.
-	PublicKey  string
+	PublicKey string
 	ListenKey string // redacted in exports
 
 	// IPSec-specific fields.
@@ -170,7 +171,7 @@ func (g *VpnGenerator) ipsecConfig(tunnel netip.Prefix) VpnConfig {
 // nextTunnelSubnet generates a unique tunnel /24 in the 10.200.x.0 range.
 func (g *VpnGenerator) nextTunnelSubnet() (netip.Prefix, error) {
 	if g.tunnelBase > 254 {
-		return netip.Prefix{}, fmt.Errorf("tunnel subnet pool exhausted")
+		return netip.Prefix{}, errors.New("tunnel subnet pool exhausted")
 	}
 
 	addr := netip.AddrFrom4([4]byte{10, 200, g.tunnelBase, 0})

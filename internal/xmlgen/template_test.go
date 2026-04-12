@@ -53,7 +53,12 @@ func TestInjectVlans(t *testing.T) {
 
 	vlans := []generator.VlanConfig{
 		{VlanID: 42, IPNetwork: netip.MustParsePrefix("10.42.7.0/24"), Description: "IT VLAN 42", WanAssignment: 1},
-		{VlanID: 100, IPNetwork: netip.MustParsePrefix("10.100.0.0/24"), Description: "Sales VLAN 100", WanAssignment: 2},
+		{
+			VlanID:        100,
+			IPNetwork:     netip.MustParsePrefix("10.100.0.0/24"),
+			Description:   "Sales VLAN 100",
+			WanAssignment: 2,
+		},
 	}
 
 	xmlgen.InjectVlans(cfg, vlans, 6)
@@ -94,7 +99,13 @@ func TestInjectDHCP(t *testing.T) {
 
 	rng := rand.New(rand.NewPCG(42, 0))
 	vlans := []generator.VlanConfig{
-		{VlanID: 42, IPNetwork: netip.MustParsePrefix("10.42.7.0/24"), Description: "IT", WanAssignment: 1, Department: generator.DeptIT},
+		{
+			VlanID:        42,
+			IPNetwork:     netip.MustParsePrefix("10.42.7.0/24"),
+			Description:   "IT",
+			WanAssignment: 1,
+			Department:    generator.DeptIT,
+		},
 	}
 	dhcpConfigs := []generator.DhcpServerConfig{
 		generator.DeriveDHCPConfig(vlans[0], rng),
@@ -150,7 +161,12 @@ func TestMarshalXMLEscaping(t *testing.T) {
 	require.NoError(t, err)
 
 	vlans := []generator.VlanConfig{
-		{VlanID: 42, IPNetwork: netip.MustParsePrefix("10.42.7.0/24"), Description: "Test & <Special> \"Chars\"", WanAssignment: 1},
+		{
+			VlanID:        42,
+			IPNetwork:     netip.MustParsePrefix("10.42.7.0/24"),
+			Description:   "Test & <Special> \"Chars\"",
+			WanAssignment: 1,
+		},
 	}
 
 	xmlgen.InjectVlans(cfg, vlans, 6)

@@ -65,7 +65,12 @@ func TestValidateVlansIDOutOfRange(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			vlans := []generator.VlanConfig{
-				{VlanID: tt.vlanID, IPNetwork: netip.MustParsePrefix("10.1.1.0/24"), Description: "test", WanAssignment: 1},
+				{
+					VlanID:        tt.vlanID,
+					IPNetwork:     netip.MustParsePrefix("10.1.1.0/24"),
+					Description:   "test",
+					WanAssignment: 1,
+				},
 			}
 			result := validate.ValidateVlans(vlans)
 			if tt.wantErr {
