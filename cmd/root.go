@@ -15,7 +15,7 @@ var (
 	output  string
 )
 
-// rootCmd represents the base command when called without any subcommands
+// rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
 	Use:   "opnConfigGenerator",
 	Short: "Generate realistic OPNsense configuration files with fake data",
@@ -33,12 +33,13 @@ Features:
   • Create NAT rules and port forwards
   • Support for various output formats (XML, CSV)
   • Configurable generation parameters`,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRun: func(_ *cobra.Command, _ []string) {
 		// Set up logging based on flags and environment
 		setupLogging()
 	},
 }
 
+// Execute runs the root command with the given version string.
 func Execute(version string) error {
 	rootCmd.Version = version
 	return rootCmd.Execute()
@@ -78,28 +79,34 @@ func setupLogging() {
 }
 
 // getOutputWriter returns the appropriate output destination.
-// If an output file is specified and --force is not set, it checks for existing files first.
+// If an output file is specified and --force is not set, it uses O_EXCL for atomic creation.
 func getOutputWriter() (*os.File, bool, error) {
 	if output == "" {
 		return os.Stdout, false, nil
 	}
 
-	// Check if file exists when --force is not set.
-	if !force {
-		if _, err := os.Stat(output); err == nil {
-			return nil, false, fmt.Errorf("output file %q already exists (use --force to overwrite)", output)
+	if force {
+		file, err := os.Create(output)
+		if err != nil {
+			return nil, false, fmt.Errorf("create output file %s: %w", output, err)
 		}
+		return file, true, nil
 	}
 
-	file, err := os.Create(output)
+	// Use O_EXCL for atomic "create if not exists" — no TOCTOU race.
+	//nolint:gosec // Output file path is user-specified CLI input
+	file, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to create output file %s: %w", output, err)
+		if os.IsExist(err) {
+			return nil, false, fmt.Errorf("output file %q already exists (use --force to overwrite)", output)
+		}
+		return nil, false, fmt.Errorf("create output file %s: %w", output, err)
 	}
 
 	return file, true, nil
 }
 
-// normalizeStringFlag normalizes string flags by trimming whitespace and converting to lowercase
+// normalizeStringFlag normalizes string flags by trimming whitespace and converting to lowercase.
 func normalizeStringFlag(value string) string {
 	return strings.TrimSpace(strings.ToLower(value))
 }

@@ -16,8 +16,10 @@ type FirewallGenerator struct {
 func NewFirewallGenerator(seed *int64) *FirewallGenerator {
 	var rng *rand.Rand
 	if seed != nil {
+		//nolint:gosec // Deterministic fake data generation, not security-sensitive
 		rng = rand.New(rand.NewPCG(uint64(*seed), 0))
 	} else {
+		//nolint:gosec // Deterministic fake data generation, not security-sensitive
 		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	}
 
@@ -78,7 +80,7 @@ func (g *FirewallGenerator) intermediateRules(vlanID uint16, iface, vlanNet stri
 
 func (g *FirewallGenerator) advancedRules(vlan VlanConfig, iface string) []FirewallRule {
 	vlanNet := vlan.IPNetwork.String()
-	rules := make([]FirewallRule, 0, 8)
+	rules := make([]FirewallRule, 0, advancedRuleCount-intermediateRuleCount)
 
 	switch vlan.Department {
 	case DeptIT, DeptEngineering, DeptDevelopment:
@@ -129,18 +131,25 @@ func (g *FirewallGenerator) newRule(
 		Description: desc,
 		Log:         log,
 		VlanID:      vlanID,
-		Priority:    uint16(g.ruleCounter),
-		Interface:   iface,
-		Tracker:     tracker,
+		//nolint:gosec // Capped at max uint16 via min()
+		Priority:  uint16(min(g.ruleCounter, uint64(^uint16(0)))),
+		Interface: iface,
+		Tracker:   tracker,
 	}
 }
 
+// maxTrackerRetries is the maximum attempts to find a unique tracker value.
+const maxTrackerRetries = 1000
+
 func (g *FirewallGenerator) nextTracker() uint64 {
-	for {
+	for range maxTrackerRetries {
 		tracker := g.rng.Uint64()
 		if !g.usedTracker[tracker] {
 			g.usedTracker[tracker] = true
 			return tracker
 		}
 	}
+
+	// Extremely unlikely with uint64 space, but fail deterministically rather than loop forever.
+	panic("failed to generate unique tracker after maximum retries — possible RNG issue")
 }

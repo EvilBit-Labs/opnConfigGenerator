@@ -1,0 +1,213 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+#
+# GoReleaser v2 configuration for opnConfigGenerator
+# Updated for Cosign v3, keyless signing, and current best practices
+#
+# See also: .github/workflows/release.yml
+# Reference: https://github.com/goreleaser/example-supply-chain
+
+version: 2
+
+project_name: opnConfigGenerator
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+    - git-cliff --output CHANGELOG.md
+    - just notices
+    # Build binary first for generating documentation
+    - go build -o ./opnconfiggenerator-temp ./main.go
+    # Generate shell completions
+    - mkdir -p ./packaging/completions
+    - bash -c './opnconfiggenerator-temp completion bash > ./packaging/completions/opnconfiggenerator.bash'
+    - bash -c './opnconfiggenerator-temp completion zsh > ./packaging/completions/opnconfiggenerator.zsh'
+    - bash -c './opnconfiggenerator-temp completion fish > ./packaging/completions/opnconfiggenerator.fish'
+    - bash -c './opnconfiggenerator-temp completion powershell > ./packaging/completions/opnconfiggenerator.ps1'
+    # Clean up temporary binary
+    - rm ./opnconfiggenerator-temp
+
+# Build configuration
+# https://goreleaser.com/customization/builds/go/
+builds:
+  - id: opnconfiggenerator
+    binary: opnconfiggenerator
+    main: ./main.go
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - freebsd
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: freebsd
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      # Use CommitDate for reproducible builds
+      - >-
+        -s -w
+        -X main.version={{.Version}}
+        -X main.commit={{.Commit}}
+        -X main.date={{ .CommitDate }}
+        -X github.com/EvilBit-Labs/opnConfigGenerator/cmd.buildDate={{ .CommitDate }}
+        -X github.com/EvilBit-Labs/opnConfigGenerator/cmd.gitCommit={{.Commit}}
+    # Ensures mod timestamp matches commit for reproducibility
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+# Archive configuration
+# https://goreleaser.com/customization/archive/
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+      - THIRD_PARTY_NOTICES
+      - src: ./packaging/completions/*
+        dst: completions
+      - src: ./packaging/opnConfigGenerator.1
+        dst: man/opnconfiggenerator.1
+    # Preserve commit timestamp for reproducibility
+    builds_info:
+      mtime: "{{ .CommitTimestamp }}"
+
+# Checksum configuration
+# https://goreleaser.com/customization/checksum/
+checksum:
+  name_template: "{{ .ProjectName }}_checksums.txt"
+
+# Changelog: git-cliff generates CHANGELOG.md in before hooks
+# GoReleaser uses its default git provider for the GitHub Release body
+changelog:
+  use: git
+
+# Release configuration
+# https://goreleaser.com/customization/release/
+release:
+  github:
+    owner: "EvilBit-Labs"
+    name: "opnConfigGenerator"
+  prerelease: auto
+  include_meta: true
+  header: |
+    ## Release {{.Tag}}
+
+    This release includes the following changes:
+  footer: |
+    **Full Changelog**: https://github.com/EvilBit-Labs/opnConfigGenerator/compare/{{.PreviousTag}}...{{.Tag}}
+
+    ## Security Information
+
+    This release includes:
+    - Cosign keyless signatures (Sigstore)
+
+    ### Verify Signatures
+
+    ```bash
+    # Download the checksum file and its signature
+    wget https://github.com/EvilBit-Labs/opnConfigGenerator/releases/download/{{.Tag}}/opnConfigGenerator_checksums.txt
+    wget https://github.com/EvilBit-Labs/opnConfigGenerator/releases/download/{{.Tag}}/opnConfigGenerator_checksums.txt.sigstore.json
+
+    # Verify with cosign v3
+    cosign verify-blob \
+      --certificate-identity "https://github.com/EvilBit-Labs/opnConfigGenerator/.github/workflows/release.yml@refs/tags/{{.Tag}}" \
+      --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+      --bundle opnConfigGenerator_checksums.txt.sigstore.json \
+      opnConfigGenerator_checksums.txt
+    ```
+
+    ### Download Binary
+    Download the appropriate binary for your platform from the assets below.
+
+    ### Verify Checksums
+    ```bash
+    sha256sum -c opnConfigGenerator_checksums.txt
+    ```
+
+# Source tarball (disabled - use git clone instead)
+source:
+  enabled: false
+
+# Universal binaries for macOS (combines amd64 and arm64)
+# With replace: true, the individual darwin/amd64 and darwin/arm64 binaries are
+# removed from artifacts and replaced by a single darwin/all universal binary.
+# The archive name_template produces "Darwin_all" for the Arch variable.
+universal_binaries:
+  - id: opnconfiggenerator-universal
+    ids:
+      - opnconfiggenerator
+    replace: true
+    hooks:
+      post:
+        # macOS code signing with quill (optional, requires Apple credentials)
+        # Set QUILL_SIGN_P12, QUILL_SIGN_PASSWORD, QUILL_NOTARY_KEY, QUILL_NOTARY_KEY_ID, QUILL_NOTARY_ISSUER
+        # For snapshots: ad-hoc signing only (no notarization)
+        # For releases: full signing and notarization
+        - cmd: >-
+            {{ if isEnvSet "QUILL_SIGN_P12" }}
+            quill sign-and-notarize "{{ .Path }}" --dry-run={{ .IsSnapshot }} --ad-hoc={{ .IsSnapshot }} -vv
+            {{ end }}
+          env:
+            - QUILL_LOG_FILE=/tmp/quill-universal.log
+          output: true
+
+# Milestone auto-close
+milestones:
+  - repo:
+      owner: "EvilBit-Labs"
+      name: opnConfigGenerator
+    close: true
+    fail_on_error: false
+
+# Artifact signing configuration
+# https://goreleaser.com/customization/sign/
+signs:
+  # Cosign v3 keyless signing for checksums (Sigstore transparency log)
+  # https://goreleaser.com/blog/cosign-v3/
+  - id: checksum-cosign
+    cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - "sign-blob"
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+
+  # GPG signing disabled for now - re-enable when secrets are properly configured
+  # See RELEASING.md for GPG setup instructions
+
+# SBOM generation with CycloneDX-gomod
+# https://goreleaser.com/customization/sbom/
+sboms:
+  - id: binary-sbom
+    documents:
+      - "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}.bom.json"
+    artifacts: binary
+    cmd: cyclonedx-gomod
+    args: ["bin", "-json", "-output", "$document", "$artifact"]
+  - id: module-sbom
+    documents:
+      - "{{ .ProjectName }}_{{ .Version }}_module.bom.json"
+    artifacts: any
+    cmd: cyclonedx-gomod
+    args: ["mod", "-licenses", "-std", "-json", "-output", "$document", "../"]
