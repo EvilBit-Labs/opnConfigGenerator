@@ -347,9 +347,10 @@ _require-git-cliff:
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Run gosec security scanner
+# Excludes: G115 (safe narrowing), G302/G304 (CLI file I/O), G404 (intentional math/rand for fake data)
 [group('security')]
 scan:
-    @{{ mise_exec }} gosec ./...
+    @{{ mise_exec }} gosec -exclude=G115,G302,G304,G404 ./...
 
 # Generate SBOM with cyclonedx-gomod
 [group('security')]

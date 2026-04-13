@@ -51,6 +51,18 @@ Thumbs.db
 # Project-specific
 opnConfigGenerator
 opnConfigGenerator.exe
+opnconfiggenerator
+opnconfiggenerator.exe
+
+# Release artifacts
+packaging/completions/
+THIRD_PARTY_NOTICES
+CHANGELOG.md
+*.cyclonedx.json
+
+# Benchmark baselines
+.benchmark-baseline.txt
+.benchmark-current.txt
 
 # Claude AI files
 .claude/settings.local.json
