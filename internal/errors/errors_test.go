@@ -15,8 +15,18 @@ func TestConfigErrorIs(t *testing.T) {
 		target error
 		want   bool
 	}{
-		{"validation matches", cfgerrors.NewConfigError(cfgerrors.ErrValidation, "bad input"), cfgerrors.ErrValidation, true},
-		{"resource exhausted matches", cfgerrors.NewConfigError(cfgerrors.ErrResourceExhausted, "no IDs"), cfgerrors.ErrResourceExhausted, true},
+		{
+			"validation matches",
+			cfgerrors.NewConfigError(cfgerrors.ErrValidation, "bad input"),
+			cfgerrors.ErrValidation,
+			true,
+		},
+		{
+			"resource exhausted matches",
+			cfgerrors.NewConfigError(cfgerrors.ErrResourceExhausted, "no IDs"),
+			cfgerrors.ErrResourceExhausted,
+			true,
+		},
 		{"different kind no match", cfgerrors.NewConfigError(cfgerrors.ErrIO, "disk"), cfgerrors.ErrCSV, false},
 	}
 
@@ -77,9 +87,21 @@ func TestVlanErrorMessages(t *testing.T) {
 		createFn func() *cfgerrors.VlanError
 		expected string
 	}{
-		{"VLAN ID range validation", func() *cfgerrors.VlanError { return cfgerrors.InvalidVlanID(9) }, "VLAN ID 9 is outside valid range 10-4094"},
-		{"RFC 1918 compliance", func() *cfgerrors.VlanError { return cfgerrors.NonRFC1918Network("192.0.2.0/24") }, "network 192.0.2.0/24 is not RFC 1918 compliant"},
-		{"WAN assignment range", func() *cfgerrors.VlanError { return cfgerrors.InvalidWanAssignment(4) }, "WAN assignment 4 is outside valid range 1-3"},
+		{
+			"VLAN ID range validation",
+			func() *cfgerrors.VlanError { return cfgerrors.InvalidVlanID(9) },
+			"VLAN ID 9 is outside valid range 10-4094",
+		},
+		{
+			"RFC 1918 compliance",
+			func() *cfgerrors.VlanError { return cfgerrors.NonRFC1918Network("192.0.2.0/24") },
+			"network 192.0.2.0/24 is not RFC 1918 compliant",
+		},
+		{
+			"WAN assignment range",
+			func() *cfgerrors.VlanError { return cfgerrors.InvalidWanAssignment(4) },
+			"WAN assignment 4 is outside valid range 1-3",
+		},
 	}
 
 	for _, tt := range tests {

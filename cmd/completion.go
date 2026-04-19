@@ -1,3 +1,4 @@
+// Package cmd implements the CLI commands for the opnConfigGenerator tool.
 package cmd
 
 import (
@@ -7,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// completionCmd represents the completion command
+// completionCmd represents the completion command.
 var completionCmd = &cobra.Command{
 	Use:   "completion [bash|zsh|fish|powershell]",
 	Short: "Generate completion script",
@@ -50,7 +51,7 @@ PowerShell:
 	DisableFlagsInUseLine: true,
 	ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
 	Args:                  cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, args []string) error {
 		switch args[0] {
 		case "bash":
 			return rootCmd.GenBashCompletion(os.Stdout)

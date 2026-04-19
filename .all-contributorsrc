@@ -1,0 +1,30 @@
+{
+  "projectName": "opnConfigGenerator",
+  "projectOwner": "EvilBit-Labs",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": [
+    "CONTRIBUTORS.md"
+  ],
+  "imageSize": 100,
+  "commit": false,
+  "commitConvention": "angular",
+  "contributors": [
+    {
+      "login": "unclesp1d3r",
+      "name": "UncleSp1d3r",
+      "avatar_url": "https://avatars.githubusercontent.com/unclesp1d3r",
+      "profile": "https://github.com/unclesp1d3r",
+      "contributions": [
+        "code",
+        "doc",
+        "test",
+        "infra",
+        "maintenance"
+      ]
+    }
+  ],
+  "contributorsPerLine": 7,
+  "skipCi": true,
+  "commitType": "docs"
+}

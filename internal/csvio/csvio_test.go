@@ -17,8 +17,18 @@ func TestWriteAndReadRoundTrip(t *testing.T) {
 
 	vlans := []generator.VlanConfig{
 		{VlanID: 42, IPNetwork: netip.MustParsePrefix("10.42.0.0/24"), Description: "IT VLAN 42", WanAssignment: 1},
-		{VlanID: 100, IPNetwork: netip.MustParsePrefix("10.100.0.0/24"), Description: "Sales VLAN 100", WanAssignment: 2},
-		{VlanID: 200, IPNetwork: netip.MustParsePrefix("172.16.5.0/24"), Description: "Engineering VLAN 200", WanAssignment: 3},
+		{
+			VlanID:        100,
+			IPNetwork:     netip.MustParsePrefix("10.100.0.0/24"),
+			Description:   "Sales VLAN 100",
+			WanAssignment: 2,
+		},
+		{
+			VlanID:        200,
+			IPNetwork:     netip.MustParsePrefix("172.16.5.0/24"),
+			Description:   "Engineering VLAN 200",
+			WanAssignment: 3,
+		},
 	}
 
 	var buf bytes.Buffer
@@ -76,7 +86,7 @@ func TestReadCSVInvalidVlanID(t *testing.T) {
 
 	input := "VLAN,IP Range,Beschreibung,WAN\n5,10.1.1.0/24,test,1\n"
 	_, err := csvio.ReadVlanCSV(strings.NewReader(input))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "VLAN ID")
 }
 
@@ -85,7 +95,7 @@ func TestReadCSVInvalidNetwork(t *testing.T) {
 
 	input := "VLAN,IP Range,Beschreibung,WAN\n100,invalid,test,1\n"
 	_, err := csvio.ReadVlanCSV(strings.NewReader(input))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid network")
 }
 
@@ -94,7 +104,7 @@ func TestReadCSVEmptyDescription(t *testing.T) {
 
 	input := "VLAN,IP Range,Beschreibung,WAN\n100,10.1.1.0/24,,1\n"
 	_, err := csvio.ReadVlanCSV(strings.NewReader(input))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "description")
 }
 
@@ -103,7 +113,7 @@ func TestReadCSVInvalidWAN(t *testing.T) {
 
 	input := "VLAN,IP Range,Beschreibung,WAN\n100,10.1.1.0/24,test,5\n"
 	_, err := csvio.ReadVlanCSV(strings.NewReader(input))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "WAN assignment")
 }
 
@@ -112,7 +122,7 @@ func TestReadCSVWrongHeaders(t *testing.T) {
 
 	input := "ID,Network,Name,WAN\n100,10.1.1.0/24,test,1\n"
 	_, err := csvio.ReadVlanCSV(strings.NewReader(input))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "header")
 }
 

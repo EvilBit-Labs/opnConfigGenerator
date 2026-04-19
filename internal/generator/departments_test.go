@@ -41,10 +41,10 @@ func TestDepartmentCount(t *testing.T) {
 
 func TestDepartmentLeaseTime(t *testing.T) {
 	tests := []struct {
-		name       string
-		dept       generator.Department
-		expected   int
-		category   string
+		name     string
+		dept     generator.Department
+		expected int
+		category string
 	}{
 		// Corporate departments (24h)
 		{"IT corporate", generator.DeptIT, generator.LeaseTimeCorporate, "corporate"},
@@ -142,11 +142,12 @@ func TestDepartmentStaticReservationDevices(t *testing.T) {
 
 func TestRandomDepartment(t *testing.T) {
 	// Test with seeded RNG for deterministic output
+	//nolint:gosec // Deterministic fake data generation, not security-sensitive
 	rng := rand.New(rand.NewPCG(42, 1337))
 
 	// Generate multiple departments and verify they're all valid
 	seenDepts := make(map[generator.Department]bool)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		dept := generator.RandomDepartment(rng)
 		if !slices.Contains(generator.AllDepartments, dept) {
 			t.Errorf("RandomDepartment() returned invalid department: %s", dept)
@@ -165,7 +166,9 @@ func TestRandomDepartmentDeterministic(t *testing.T) {
 	seed1 := uint64(12345)
 	seed2 := uint64(67890)
 
+	//nolint:gosec // Deterministic fake data generation, not security-sensitive
 	rng1a := rand.New(rand.NewPCG(seed1, seed2))
+	//nolint:gosec // Deterministic fake data generation, not security-sensitive
 	rng1b := rand.New(rand.NewPCG(seed1, seed2))
 
 	dept1a := generator.RandomDepartment(rng1a)
@@ -176,10 +179,12 @@ func TestRandomDepartmentDeterministic(t *testing.T) {
 	}
 
 	// Test sequence of departments
+	//nolint:gosec // Deterministic fake data generation, not security-sensitive
 	rng2a := rand.New(rand.NewPCG(seed1, seed2))
+	//nolint:gosec // Deterministic fake data generation, not security-sensitive
 	rng2b := rand.New(rand.NewPCG(seed1, seed2))
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		deptA := generator.RandomDepartment(rng2a)
 		deptB := generator.RandomDepartment(rng2b)
 		if deptA != deptB {
@@ -249,7 +254,7 @@ func TestAllDepartmentsHaveValidReservationCounts(t *testing.T) {
 	}
 }
 
-// Helper function to compare slices
+// Helper function to compare slices.
 func slicesEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
