@@ -1,10 +1,10 @@
-# opnConfigGenerator -- Realistic Network Device Config Generator
+# opnConfigGenerator -- CommonDevice → config.xml reverse serializer
 
 [![CI][ci-badge]][ci] [![Go Version][go-badge]][go] [![License][license-badge]][license] [![Go Report Card][goreportcard-badge]][goreportcard]
 
-Generate realistic, valid OPNsense `config.xml` files populated with fake data -- for testing, training, development, and demos. No real network data exposed.
+Generate realistic, valid OPNsense `config.xml` files from a synthetic [opnDossier](https://github.com/EvilBit-Labs/opnDossier) `CommonDevice`. opnDossier parses `config.xml → CommonDevice`; opnConfigGenerator is the missing inverse: `faker → CommonDevice → OpnSenseDocument → config.xml`. No inputs required — the tool owns every field.
 
-Part of the [opnDossier](https://github.com/EvilBit-Labs/opnDossier) ecosystem. Built for offline operation: single binary, no network calls, no telemetry.
+Built for offline operation: single binary, no network calls, no telemetry.
 
 ## Quick Start
 
@@ -12,137 +12,74 @@ Part of the [opnDossier](https://github.com/EvilBit-Labs/opnDossier) ecosystem. 
 # Install
 go install github.com/EvilBit-Labs/opnConfigGenerator@latest
 
-# Generate 25 VLANs with firewall rules as OPNsense XML
-opnconfiggenerator generate \
-  --format xml \
-  --count 25 \
-  --base-config config.xml \
-  --include-firewall-rules \
-  --seed 42
+# Zero arguments -- a valid config.xml on stdout
+opnconfiggenerator generate
 
-# Export as CSV for spreadsheet analysis
-opnconfiggenerator generate --format csv --count 50 --output vlans.csv
+# Reproducible output (same seed => byte-identical bytes)
+opnconfiggenerator generate --seed 42 > config.xml
+
+# 20 VLANs with default firewall rules
+opnconfiggenerator generate --vlan-count 20 --firewall-rules --seed 42
+
+# Overlay generated content onto an existing config, preserving everything
+# outside the serializer's Phase 1 scope (NAT, VPN, certificates, ...)
+opnconfiggenerator generate --base-config existing.xml --seed 42
+
+# CSV inspection dump of the generated VLANs
+opnconfiggenerator generate --format csv --vlan-count 10 --seed 42
 ```
 
-Same `--seed` always produces identical output -- across runs and platforms.
+Same `--seed` always produces byte-identical output across runs and platforms.
 
-## What It Generates
+## Pipeline
 
-| Component          | Description                                           | Options                                             |
-| ------------------ | ----------------------------------------------------- | --------------------------------------------------- |
-| **VLANs**          | Unique IDs, RFC 1918 networks, department assignments | 1--4085 per run                                     |
-| **DHCP**           | Ranges, gateways, DNS, NTP, static reservations       | Per-VLAN automatic                                  |
-| **Firewall rules** | Allow/block rules with proper dependencies            | basic (3), intermediate (7), advanced (15) per VLAN |
-| **Interfaces**     | Named assignments with IP and subnet                  | Tracks opt counters                                 |
-| **VPN**            | OpenVPN, WireGuard, IPsec tunnel configs              | Mix of types                                        |
-| **NAT**            | Port forwards, source/dest NAT, outbound rules        | 5 rule types                                        |
-
-All generated data passes structural validation: unique VLAN IDs, no overlapping subnets, valid RFC 1918 addresses, consistent cross-references.
-
-## Installation
-
-### Pre-built binaries
-
-Download from [GitHub Releases](https://github.com/EvilBit-Labs/opnConfigGenerator/releases) for Linux, macOS (universal), and Windows.
-
-### From source
-
-Requires Go 1.26+:
-
-```bash
-go install github.com/EvilBit-Labs/opnConfigGenerator@latest
+```mermaid
+flowchart LR
+    CLI[cmd/generate] --> F[faker.NewCommonDevice]
+    F --> CD[*model.CommonDevice]
+    CD --> S[serializer/opnsense.Serialize]
+    CD -- "--format csv" --> CSV[csvio.WriteVlanCSV]
+    S --> D[*opnsense.OpnSenseDocument]
+    BASE[--base-config file] --> LOAD[opnsensegen.LoadBaseConfig]
+    LOAD --> OV[serializer/opnsense.Overlay]
+    CD --> OV
+    OV --> D
+    D --> M[opnsensegen.MarshalConfig]
+    M --> XML[(config.xml)]
+    CSV --> OUT[(csv)]
 ```
 
-### Verify
+`*model.CommonDevice` is the single intermediate representation. opnDossier defines it; this project populates and serializes it. A future `internal/serializer/pfsense/` sibling will plug in alongside `internal/serializer/opnsense/` when pfSense support lands; the CLI routes by `CommonDevice.DeviceType`.
 
-```bash
-opnconfiggenerator --version
-```
+## What the Phase 1 Serializer Covers
 
-## Usage
+| Subsystem      | Coverage                                                         |
+| -------------- | ---------------------------------------------------------------- |
+| System         | Hostname, domain, timezone, DNS/NTP servers, WebGUI/SSH defaults |
+| Interfaces     | WAN (DHCP), LAN (static RFC 1918 /24), per-VLAN opt interfaces   |
+| VLANs          | Unique 802.1Q tags [2..4094] on shared physical parent           |
+| DHCP           | ISC DHCP scope per statically-addressed interface (WAN excluded) |
+| Firewall rules | One default pass rule per non-WAN interface (opt-in)             |
 
-### Generate OPNsense XML
-
-Start with a base `config.xml` (a minimal OPNsense config or an export from a real device):
-
-```bash
-opnconfiggenerator generate \
-  --format xml \
-  --count 10 \
-  --base-config config.xml \
-  --output generated.xml
-```
-
-The tool injects generated VLANs, interfaces, DHCP pools, and optionally firewall rules into the base config while preserving its existing structure.
-
-### Generate with firewall rules
-
-Three complexity levels control how many rules are created per VLAN:
-
-```bash
-# Basic: 3 rules per VLAN (allow internal, DNS, HTTP/S)
-opnconfiggenerator generate --format xml --count 10 \
-  --base-config config.xml --include-firewall-rules
-
-# Advanced: 15 rules per VLAN (department-specific + security rules)
-opnconfiggenerator generate --format xml --count 10 \
-  --base-config config.xml \
-  --include-firewall-rules --firewall-rule-complexity advanced
-```
-
-### Reproducible output
-
-Use `--seed` for deterministic generation -- the same seed always produces identical configs:
-
-```bash
-# These two runs produce byte-identical output
-opnconfiggenerator generate --format csv --count 20 --seed 42 --output run1.csv
-opnconfiggenerator generate --format csv --count 20 --seed 42 --output run2.csv
-diff run1.csv run2.csv  # no differences
-```
-
-### Export as CSV
-
-CSV output uses German headers (`VLAN`, `IP Range`, `Beschreibung`, `WAN`) for backward compatibility with the original toolchain, and includes a UTF-8 BOM for Excel compatibility on Windows:
-
-```bash
-opnconfiggenerator generate --format csv --count 50 --output network-data.csv
-```
-
-### WAN distribution
-
-Control how VLANs are distributed across WAN interfaces:
-
-```bash
-# All VLANs on WAN 1 (default)
-opnconfiggenerator generate --format xml --count 10 --base-config config.xml
-
-# Round-robin across WANs 1-3
-opnconfiggenerator generate --format xml --count 10 --base-config config.xml \
-  --wan-assignments multi
-
-# Random distribution across WANs 1-3
-opnconfiggenerator generate --format xml --count 10 --base-config config.xml \
-  --wan-assignments balanced
-```
+Deferred to follow-up plans (one per subsystem): NAT, VPN (OpenVPN/WireGuard/IPsec), Users/Groups, Certificates/CAs, IDS, HighAvailability, VirtualIPs, Bridges, GIF/GRE/LAGG, PPP, CaptivePortal, Kea DHCP, Monit, Netflow, TrafficShaper, Syslog forwarding, pfSense target.
 
 ## Command Reference
 
 ### `generate`
 
-| Flag                         | Default      | Description                                                       |
-| ---------------------------- | ------------ | ----------------------------------------------------------------- |
-| `--format`                   | *(required)* | Output format: `csv` or `xml`                                     |
-| `--count`                    | `10`         | Number of VLANs to generate (1--4085)                             |
-| `--base-config`              |              | Base OPNsense XML template (required for `xml`)                   |
-| `--seed`                     | `0` (random) | RNG seed for reproducible output                                  |
-| `--include-firewall-rules`   | `false`      | Generate firewall rules per VLAN                                  |
-| `--firewall-rule-complexity` | `basic`      | `basic` (3), `intermediate` (7), `advanced` (15) rules per VLAN   |
-| `--wan-assignments`          | `single`     | WAN strategy: `single`, `multi`, `balanced`                       |
-| `--output`                   | stdout       | Output file path                                                  |
-| `--force`                    | `false`      | Overwrite existing output files                                   |
-| `--quiet`                    | `false`      | Suppress non-error output                                         |
-| `--no-color`                 | `false`      | Disable colored output (also respects `NO_COLOR` and `TERM=dumb`) |
+| Flag                | Default      | Description                                                       |
+| ------------------- | ------------ | ----------------------------------------------------------------- |
+| `--format`          | `xml`        | Output format: `xml` (valid config.xml) or `csv` (VLAN dump)      |
+| `--vlan-count`/`-n` | `10`         | Number of VLANs to generate (0--4092)                             |
+| `--base-config`     |              | Optional base `config.xml`; serializer overlays onto it           |
+| `--firewall-rules`  | `false`      | Include default allow-all-to-any rules per interface              |
+| `--seed`            | `0` (random) | RNG seed for reproducible output                                  |
+| `--hostname`        |              | Override the generated hostname                                   |
+| `--domain`          |              | Override the generated domain                                     |
+| `--output`/`-o`     | stdout       | Output file path                                                  |
+| `--force`           | `false`      | Overwrite existing output files                                   |
+| `--quiet`           | `false`      | Suppress non-error output                                         |
+| `--no-color`        | `false`      | Disable colored output (also respects `NO_COLOR` and `TERM=dumb`) |
 
 ### `validate`
 
@@ -160,45 +97,31 @@ opnconfiggenerator completion fish > ~/.config/fish/completions/opnconfiggenerat
 
 ## Use Cases
 
-- **Testing opnDossier** -- Generate diverse configs to test parsing, validation, and audit features
-- **Training environments** -- Create realistic lab configs for network engineering courses
+- **Testing opnDossier** -- Round-trip synthetic configs through the parser to catch schema or conversion regressions
+- **Training environments** -- Realistic lab configs for network engineering courses without real network exposure
 - **CI/CD test fixtures** -- Deterministic `--seed` output for integration test suites
 - **Demo data** -- Populate OPNsense instances for product demos without exposing real networks
-- **Security research** -- Generate configs with known firewall rule patterns for analysis
+- **Security research** -- Generate configs with controlled firewall rule shapes for analysis
 
-## How It Works
+## Installation
 
-```mermaid
-graph LR
-    subgraph Generators["Generators (device-agnostic)"]
-        VLAN[VLAN]
-        FW[Firewall]
-        DHCP[DHCP]
-        NAT[NAT]
-        VPN[VPN]
-    end
+### Pre-built binaries
 
-    subgraph Serializers["Serializers (device-specific)"]
-        OPN[opnsensegen]
-        PF[pfsensegen<br/><i>planned</i>]
-    end
+Download from [GitHub Releases](https://github.com/EvilBit-Labs/opnConfigGenerator/releases) for Linux, macOS (universal), and Windows.
 
-    VLAN --> OPN
-    FW --> OPN
-    DHCP --> OPN
-    NAT --> OPN
-    VPN --> OPN
+### From source
 
-    OPN -->|opnDossier<br/>schema types| XML[config.xml]
-    PF -->|opnDossier<br/>schema types| PFXML[config.xml]
+Requires Go 1.26+:
 
-    style PF stroke-dasharray: 5 5
-    style PFXML stroke-dasharray: 5 5
+```bash
+go install github.com/EvilBit-Labs/opnConfigGenerator@latest
 ```
 
-Generators produce device-agnostic data. Device-specific serializers translate that into the target schema using [opnDossier's canonical types](https://github.com/EvilBit-Labs/opnDossier). Generated configs are structurally identical to real device exports.
+Verify:
 
-Currently supports OPNsense. pfSense support is planned as opnDossier expands its device parser coverage.
+```bash
+opnconfiggenerator --version
+```
 
 ## Development
 
@@ -211,11 +134,11 @@ just ci-check  # Full CI validation (required before committing)
 just build     # Build binary
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for coding standards, architecture details, and PR process.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for coding standards and PR process.
 
 ## Related Projects
 
-- **[opnDossier](https://github.com/EvilBit-Labs/opnDossier)** -- Process OPNsense/pfSense configs into documentation, audits, and structured data
+- **[opnDossier](https://github.com/EvilBit-Labs/opnDossier)** -- Process OPNsense/pfSense configs into documentation, audits, and structured data. opnDossier provides `*model.CommonDevice` and `*opnsense.OpnSenseDocument` as public API; this project is its reverse serializer.
 
 ## License
 
