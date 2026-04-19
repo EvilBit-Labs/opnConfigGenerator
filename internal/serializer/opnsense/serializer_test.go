@@ -90,7 +90,7 @@ func TestRoundTrip(t *testing.T) {
 	}
 
 	// Firewall rule per-field parity. Faker emits rules keyed to an
-	// interface name, so we compare by Interfaces[0] + Type to find pairs.
+	// interface name, so we compare by Interfaces[0] to find pairs.
 	require.Len(t, roundTripped.FirewallRules, len(original.FirewallRules))
 	origRules := firewallRulesByInterface(original.FirewallRules)
 	rtRules := firewallRulesByInterface(roundTripped.FirewallRules)
@@ -100,8 +100,17 @@ func TestRoundTrip(t *testing.T) {
 		assert.Equalf(t, want.Type, got.Type, "rule %q Type", iface)
 		assert.Equalf(t, want.Description, got.Description, "rule %q Description", iface)
 		assert.Equalf(t, want.IPProtocol, got.IPProtocol, "rule %q IPProtocol", iface)
+		assert.Equalf(t, want.Direction, got.Direction, "rule %q Direction", iface)
+		assert.Equalf(t, want.Protocol, got.Protocol, "rule %q Protocol", iface)
+		assert.Equalf(t, want.Log, got.Log, "rule %q Log", iface)
+		assert.Equalf(t, want.Disabled, got.Disabled, "rule %q Disabled", iface)
+		assert.Equalf(t, want.Tracker, got.Tracker, "rule %q Tracker", iface)
 		assert.Equalf(t, want.Source.Address, got.Source.Address, "rule %q Source.Address", iface)
+		assert.Equalf(t, want.Source.Port, got.Source.Port, "rule %q Source.Port", iface)
+		assert.Equalf(t, want.Source.Negated, got.Source.Negated, "rule %q Source.Negated", iface)
 		assert.Equalf(t, want.Destination.Address, got.Destination.Address, "rule %q Destination.Address", iface)
+		assert.Equalf(t, want.Destination.Port, got.Destination.Port, "rule %q Destination.Port", iface)
+		assert.Equalf(t, want.Destination.Negated, got.Destination.Negated, "rule %q Destination.Negated", iface)
 	}
 }
 

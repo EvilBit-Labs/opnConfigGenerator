@@ -2,6 +2,7 @@ package opnsense
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/EvilBit-Labs/opnDossier/pkg/model"
 	"github.com/EvilBit-Labs/opnDossier/pkg/schema/opnsense"
@@ -22,7 +23,7 @@ func Overlay(base *opnsense.OpnSenseDocument, device *model.CommonDevice) (*opns
 	}
 	serialized, err := Serialize(device)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("overlay: serialize device: %w", err)
 	}
 	out := *base
 	out.System = serialized.System

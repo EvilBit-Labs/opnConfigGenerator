@@ -36,24 +36,13 @@ func WriteVlanCSV(w io.Writer, device *model.CommonDevice) error {
 	}
 
 	cw := csv.NewWriter(w)
-
 	if err := cw.Write(vlanHeaders); err != nil {
 		return fmt.Errorf("write header: %w", err)
 	}
 
-	// Index interfaces by PhysicalIf so each VLAN row can pull its IP range
-	// from the matching opt interface.
-	byPhysical := make(map[string]model.Interface, len(device.Interfaces))
-	for _, iface := range device.Interfaces {
-		byPhysical[iface.PhysicalIf] = iface
-	}
-
+	byPhysical := indexByPhysical(device.Interfaces)
 	for i, v := range device.VLANs {
-		ipRange := ""
-		if iface, ok := byPhysical[v.VLANIf]; ok && iface.IPAddress != "" && iface.Subnet != "" {
-			ipRange = fmt.Sprintf("%s/%s", iface.IPAddress, iface.Subnet)
-		}
-		record := []string{v.Tag, ipRange, v.Description, defaultWanAssignment}
+		record := []string{v.Tag, ipRangeFor(v, byPhysical), v.Description, defaultWanAssignment}
 		if err := cw.Write(record); err != nil {
 			return fmt.Errorf("write row %d: %w", i, err)
 		}
@@ -61,4 +50,29 @@ func WriteVlanCSV(w io.Writer, device *model.CommonDevice) error {
 
 	cw.Flush()
 	return cw.Error()
+}
+
+// indexByPhysical returns a map from PhysicalIf to Interface for every
+// interface that carries a non-empty PhysicalIf. Interfaces without one are
+// skipped because they cannot be matched to a VLAN.VLANIf anyway.
+func indexByPhysical(interfaces []model.Interface) map[string]model.Interface {
+	byPhysical := make(map[string]model.Interface, len(interfaces))
+	for _, iface := range interfaces {
+		if iface.PhysicalIf == "" {
+			continue
+		}
+		byPhysical[iface.PhysicalIf] = iface
+	}
+	return byPhysical
+}
+
+// ipRangeFor derives the "<ip>/<subnet>" CSV cell for a VLAN by looking up
+// the backing interface in the PhysicalIf index. Returns "" when no match
+// exists or the backing interface lacks an IP/Subnet.
+func ipRangeFor(v model.VLAN, byPhysical map[string]model.Interface) string {
+	iface, ok := byPhysical[v.VLANIf]
+	if !ok || iface.IPAddress == "" || iface.Subnet == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s/%s", iface.IPAddress, iface.Subnet)
 }

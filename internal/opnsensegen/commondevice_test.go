@@ -31,8 +31,11 @@ func TestCommonDeviceRoundTripViaSerializer(t *testing.T) {
 	original, err := faker.NewCommonDevice(
 		faker.WithSeed(146),
 		faker.WithVLANCount(2),
+		// Phase 1 includes filter serialization — exercise it end-to-end.
+		faker.WithFirewallRules(true),
 	)
 	require.NoError(t, err)
+	require.NotEmpty(t, original.FirewallRules, "test precondition: faker must emit firewall rules")
 
 	doc, err := serializer.Serialize(original)
 	require.NoError(t, err)
@@ -53,8 +56,17 @@ func TestCommonDeviceRoundTripViaSerializer(t *testing.T) {
 	assert.Equal(t, model.DeviceTypeOPNsense, device.DeviceType)
 	assert.Equal(t, original.System.Hostname, device.System.Hostname)
 	assert.Equal(t, original.System.Domain, device.System.Domain)
+	assert.Equal(t, original.System.Timezone, device.System.Timezone)
+	assert.Equal(t, original.System.Language, device.System.Language)
 	assert.Len(t, device.VLANs, 2)
+	// Spot-check VLAN tag identity (not just count).
+	origTags := map[string]bool{original.VLANs[0].Tag: true, original.VLANs[1].Tag: true}
+	for _, v := range device.VLANs {
+		assert.Truef(t, origTags[v.Tag], "round-trip produced unexpected VLAN tag %q", v.Tag)
+	}
 	assert.NotEmpty(t, device.Interfaces)
+	assert.Len(t, device.FirewallRules, len(original.FirewallRules),
+		"at least one firewall rule must survive the round-trip")
 }
 
 // TestCommonDeviceMinimalConfig verifies ConvertDocument accepts the sparse

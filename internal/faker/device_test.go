@@ -1,6 +1,7 @@
 package faker
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/EvilBit-Labs/opnDossier/pkg/model"
@@ -42,6 +43,32 @@ func TestNewCommonDeviceVLANCount(t *testing.T) {
 	assert.Len(t, dev.VLANs, 4)
 	assert.Len(t, dev.Interfaces, 2+4, "WAN + LAN + 4 opt interfaces")
 	assert.Len(t, dev.DHCP, 5, "LAN + 4 opts each carry a DHCP scope")
+}
+
+func TestNewCommonDeviceVLANCountZero(t *testing.T) {
+	t.Parallel()
+
+	dev, err := NewCommonDevice(WithSeed(1), WithVLANCount(0))
+	require.NoError(t, err)
+	assert.Empty(t, dev.VLANs)
+	assert.Len(t, dev.Interfaces, 2, "WAN + LAN only")
+	assert.Len(t, dev.DHCP, 1, "LAN only")
+}
+
+func TestNewCommonDeviceVLANCountNegative(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewCommonDevice(WithVLANCount(-1))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), ">= 0")
+}
+
+func TestNewCommonDeviceVLANCountExceedsMax(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewCommonDevice(WithVLANCount(MaxVLANCount + 1))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), fmt.Sprintf("<= %d", MaxVLANCount))
 }
 
 func TestNewCommonDeviceFirewallRulesOptIn(t *testing.T) {

@@ -6,17 +6,29 @@ import (
 	"github.com/EvilBit-Labs/opnDossier/pkg/model"
 )
 
+// MaxVLANCount is the upper bound on WithVLANCount enforced by
+// NewCommonDevice. Exported so callers (CLI, tests) can reference the same
+// value instead of duplicating the literal.
+const MaxVLANCount = 4093
+
 // NewCommonDevice returns a fully-populated *model.CommonDevice ready for
 // serialization. All randomness is seeded from the Option set; with a fixed
 // WithSeed value the function is deterministic.
 //
-// Returns an error when the VLAN tag or RFC 1918 /24 uniqueness pool is
-// exhausted (e.g., extreme VLAN counts with a small pool). Callers should
-// propagate the error to the user rather than retrying blindly.
+// Returns an error when the requested VLAN count is out of range or when
+// the VLAN tag / RFC 1918 /24 uniqueness pool is exhausted. Callers should
+// propagate the error rather than retrying blindly.
 func NewCommonDevice(opts ...Option) (*model.CommonDevice, error) {
 	cfg := &config{}
 	for _, opt := range opts {
 		opt(cfg)
+	}
+
+	if cfg.vlanCount < 0 {
+		return nil, fmt.Errorf("VLAN count must be >= 0, got %d", cfg.vlanCount)
+	}
+	if cfg.vlanCount > MaxVLANCount {
+		return nil, fmt.Errorf("VLAN count must be <= %d, got %d", MaxVLANCount, cfg.vlanCount)
 	}
 
 	rng, f := newRand(cfg.seed)

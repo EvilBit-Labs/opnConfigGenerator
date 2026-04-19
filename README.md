@@ -49,7 +49,7 @@ flowchart LR
     CSV --> OUT[(csv)]
 ```
 
-`*model.CommonDevice` is the single intermediate representation. opnDossier defines it; this project populates and serializes it. A future `internal/serializer/pfsense/` sibling will plug in alongside `internal/serializer/opnsense/` when pfSense support lands; the CLI routes by `CommonDevice.DeviceType`.
+`*model.CommonDevice` is the single intermediate representation. opnDossier defines it; this project populates and serializes it. A future `internal/serializer/pfsense/` sibling will plug in alongside `internal/serializer/opnsense/` when pfSense support lands. Until then the CLI hardwires the OPNsense serializer; `CommonDevice.DeviceType`-based routing is planned, not implemented.
 
 ## What the Phase 1 Serializer Covers
 
@@ -70,7 +70,7 @@ Deferred to follow-up plans (one per subsystem): NAT, VPN (OpenVPN/WireGuard/IPs
 | Flag                | Default      | Description                                                       |
 | ------------------- | ------------ | ----------------------------------------------------------------- |
 | `--format`          | `xml`        | Output format: `xml` (valid config.xml) or `csv` (VLAN dump)      |
-| `--vlan-count`/`-n` | `10`         | Number of VLANs to generate (0--4092)                             |
+| `--vlan-count`/`-n` | `10`         | Number of VLANs to generate (0--4093)                             |
 | `--base-config`     |              | Optional base `config.xml`; serializer overlays onto it           |
 | `--firewall-rules`  | `false`      | Include default allow-all-to-any rules per interface              |
 | `--seed`            | `0` (random) | RNG seed for reproducible output                                  |

@@ -53,7 +53,7 @@ func newTestRootCmd() *cobra.Command {
 		RunE:  runGenerate,
 	}
 	genCmd.Flags().StringVar(&outputFormat, "format", formatXML, "output format (xml|csv)")
-	genCmd.Flags().IntVarP(&vlanCount, "vlan-count", "n", defaultVlanCount, "number of VLANs to generate (0-4092)")
+	genCmd.Flags().IntVarP(&vlanCount, "vlan-count", "n", defaultVlanCount, "number of VLANs to generate (0-4093)")
 	genCmd.Flags().StringVar(&baseConfigPath, "base-config", "", "optional base OPNsense config.xml")
 	genCmd.Flags().BoolVar(&includeFirewall, "firewall-rules", false, "include default firewall rules")
 	genCmd.Flags().Int64Var(&seed, "seed", 0, "RNG seed for reproducibility")
@@ -356,10 +356,24 @@ func TestGenerateVlanCountOne(t *testing.T) {
 
 func TestGenerateVlanCountExceedsMax(t *testing.T) {
 	cmd := newTestRootCmd()
-	_, err := executeCommand(cmd, "generate", "--vlan-count", "4093")
+	_, err := executeCommand(cmd, "generate", "--vlan-count", "4094")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--vlan-count")
-	assert.Contains(t, err.Error(), "4092")
+	assert.Contains(t, err.Error(), "4093")
+}
+
+func TestGenerateBaseConfigRejectedWithCSV(t *testing.T) {
+	tmpDir := t.TempDir()
+	basePath := filepath.Join(tmpDir, "base.xml")
+	require.NoError(t, os.WriteFile(basePath, []byte("<?xml version=\"1.0\"?><opnsense/>"), 0o600))
+
+	cmd := newTestRootCmd()
+	_, err := executeCommand(cmd, "generate",
+		"--format", "csv",
+		"--base-config", basePath,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--base-config is only supported with --format xml")
 }
 
 func TestGenerateBaseConfigMalformed(t *testing.T) {

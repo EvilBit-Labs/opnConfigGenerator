@@ -52,7 +52,9 @@ func TestSerializeInterfacesDisabled(t *testing.T) {
 	t.Parallel()
 
 	out := serializer.SerializeInterfaces([]model.Interface{{Name: "lan", Enabled: false}})
-	assert.Empty(t, out.Items["lan"].Enable)
+	lan, ok := out.Items["lan"]
+	require.True(t, ok, "serializer must emit the lan interface even when Enabled=false")
+	assert.Empty(t, lan.Enable)
 }
 
 func TestSerializeInterfacesTypeNoneLeavesAddressingEmpty(t *testing.T) {
@@ -61,6 +63,8 @@ func TestSerializeInterfacesTypeNoneLeavesAddressingEmpty(t *testing.T) {
 	out := serializer.SerializeInterfaces([]model.Interface{{
 		Name: "opt1", Enabled: true, Type: "", IPAddress: "1.2.3.4", Subnet: "24",
 	}})
-	assert.Empty(t, out.Items["opt1"].IPAddr)
-	assert.Empty(t, out.Items["opt1"].Subnet)
+	opt1, ok := out.Items["opt1"]
+	require.True(t, ok, "serializer must emit the opt1 interface")
+	assert.Empty(t, opt1.IPAddr)
+	assert.Empty(t, opt1.Subnet)
 }

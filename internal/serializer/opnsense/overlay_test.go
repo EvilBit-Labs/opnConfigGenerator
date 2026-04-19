@@ -43,6 +43,61 @@ func TestOverlayPreservesBaseConfigUnrelatedFields(t *testing.T) {
 	assert.Len(t, merged.VLANs.VLAN, 2)
 }
 
+// TestOverlayReplacesDhcpdAndFilter seeds both Dhcpd and Filter in the base
+// fixture and enables faker firewall rules, then asserts that overlay drops
+// the base's Dhcpd/Filter content and installs the device's. Pins the
+// wholesale-replace contract for both sections so a future silent shift to
+// merge semantics fails this test.
+func TestOverlayReplacesDhcpdAndFilter(t *testing.T) {
+	t.Parallel()
+
+	base := &opnschema.OpnSenseDocument{
+		Version: "1.0",
+		Dhcpd: opnschema.Dhcpd{
+			Items: map[string]opnschema.DhcpdInterface{
+				"lan": {
+					Enable:  "1",
+					Gateway: "10.99.99.1",
+					Range: opnschema.Range{
+						From: "10.99.99.10",
+						To:   "10.99.99.20",
+					},
+				},
+			},
+		},
+		Filter: opnschema.Filter{
+			Rule: []opnschema.Rule{
+				{Type: "block", Descr: "from base — must be dropped"},
+			},
+		},
+	}
+	device, err := faker.NewCommonDevice(
+		faker.WithSeed(1),
+		faker.WithVLANCount(2),
+		faker.WithFirewallRules(true),
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, device.FirewallRules)
+	require.NotEmpty(t, device.DHCP)
+
+	merged, err := serializer.Overlay(base, device)
+	require.NoError(t, err)
+
+	// Dhcpd — base's lan gateway 10.99.99.1 must NOT survive; the device's
+	// LAN gateway replaces it.
+	lan, ok := merged.Dhcpd.Items["lan"]
+	require.True(t, ok, "merged document must have a lan dhcpd entry from the device")
+	assert.NotEqual(t, "10.99.99.1", lan.Gateway,
+		"base Dhcpd must be replaced wholesale; base gateway must not survive")
+
+	// Filter — the base's block rule must not survive.
+	for _, r := range merged.Filter.Rule {
+		assert.NotEqual(t, "from base — must be dropped", r.Descr,
+			"base Filter.Rule entries must be replaced wholesale")
+	}
+	assert.NotEmpty(t, merged.Filter.Rule, "device firewall rules must land in merged Filter")
+}
+
 func TestOverlayNilBase(t *testing.T) {
 	t.Parallel()
 

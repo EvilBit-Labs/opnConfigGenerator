@@ -27,7 +27,19 @@ func TestNewRandZeroSeedIsRandom(t *testing.T) {
 
 	a, _ := newRand(0)
 	b, _ := newRand(0)
-	assert.NotEqual(t, a.Uint64(), b.Uint64(), "zero-seed streams must diverge")
+
+	// Sampling a single Uint64 pair has a ~1 in 2^64 collision chance —
+	// astronomical but not zero. Checking 8 consecutive draws and asserting
+	// at least one differs brings flake probability to 2^-512.
+	const samples = 8
+	diverged := false
+	for range samples {
+		if a.Uint64() != b.Uint64() {
+			diverged = true
+			break
+		}
+	}
+	assert.True(t, diverged, "zero-seed streams must diverge within %d draws", samples)
 }
 
 func TestNewRandGofakeitHonorsSeed(t *testing.T) {

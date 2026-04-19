@@ -16,11 +16,13 @@ const (
 	formatCSV = "csv"
 
 	// defaultVlanCount is the number of VLANs generated when no count is
-	// supplied. 10 matches the tool's prior default.
+	// supplied.
 	defaultVlanCount = 10
-	// maxVlanCount mirrors the 802.1Q tag space (less reserved 0, 1, 4095).
-	maxVlanCount = 4092
 )
+
+// maxVlanCount mirrors faker.MaxVLANCount so the CLI and library bound
+// validation use the same number.
+var maxVlanCount = faker.MaxVLANCount
 
 var (
 	outputFormat     string
@@ -60,7 +62,7 @@ Examples:
 
 func init() {
 	generateCmd.Flags().StringVar(&outputFormat, "format", formatXML, "output format (xml|csv)")
-	generateCmd.Flags().IntVarP(&vlanCount, "vlan-count", "n", defaultVlanCount, "number of VLANs to generate (0-4092)")
+	generateCmd.Flags().IntVarP(&vlanCount, "vlan-count", "n", defaultVlanCount, "number of VLANs to generate (0-4093)")
 	generateCmd.Flags().
 		StringVar(&baseConfigPath, "base-config", "", "optional base OPNsense config.xml to overlay generated content onto")
 	generateCmd.Flags().
@@ -81,6 +83,10 @@ func runGenerate(_ *cobra.Command, _ []string) (err error) {
 
 	if vlanCount < 0 || vlanCount > maxVlanCount {
 		return fmt.Errorf("--vlan-count must be between 0 and %d, got %d", maxVlanCount, vlanCount)
+	}
+
+	if format != formatXML && baseConfigPath != "" {
+		return fmt.Errorf("--base-config is only supported with --format %s", formatXML)
 	}
 
 	device, err := faker.NewCommonDevice(

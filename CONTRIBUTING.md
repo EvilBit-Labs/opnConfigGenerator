@@ -119,7 +119,7 @@ opnConfigGenerator/
 
 **`*model.CommonDevice` is the single intermediate representation.** opnDossier defines the model; this project populates it (via `internal/faker/`) and serializes it (via `internal/serializer/opnsense/`). There is no parallel type or wrapper.
 
-**Package layout reserves a pfSense sibling.** `internal/serializer/opnsense/` is organized so a future `internal/serializer/pfsense/` can plug in alongside without restructuring shared code. The CLI routes by `device.DeviceType`.
+**Package layout reserves a pfSense sibling (planned).** `internal/serializer/opnsense/` is organized so a future `internal/serializer/pfsense/` can plug in alongside without restructuring shared code. When that sibling lands, the CLI will route by `device.DeviceType`; today it hardwires the OPNsense serializer.
 
 **Transport is separate from serialization.** `internal/opnsensegen/` only loads, parses, and marshals XML. It does not generate or serialize. `MarshalConfig` post-processes to sort map-backed sections alphabetically (see GOTCHAS §7.1) so output is byte-stable under a fixed seed.
 

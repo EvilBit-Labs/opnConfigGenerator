@@ -26,7 +26,9 @@ func TestFakeDHCPScopesOnePerStaticInterface(t *testing.T) {
 	assert.Contains(t, names, "lan")
 	assert.Contains(t, names, "opt1")
 
+	byName := make(map[string]model.DHCPScope, len(scopes))
 	for _, s := range scopes {
+		byName[s.Interface] = s
 		assert.True(t, s.Enabled)
 		assert.NotEmpty(t, s.Range.From)
 		assert.NotEmpty(t, s.Range.To)
@@ -36,6 +38,17 @@ func TestFakeDHCPScopesOnePerStaticInterface(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, from.Less(to), "DHCP range.from must be < range.to")
 	}
+
+	// Gateway and DNSServer are populated from the interface IP; a regression
+	// that empties or swaps them would otherwise be invisible.
+	lan, ok := byName["lan"]
+	require.True(t, ok)
+	assert.Equal(t, "192.168.1.1", lan.Gateway)
+	assert.Equal(t, "192.168.1.1", lan.DNSServer)
+	opt1, ok := byName["opt1"]
+	require.True(t, ok)
+	assert.Equal(t, "10.0.0.1", opt1.Gateway)
+	assert.Equal(t, "10.0.0.1", opt1.DNSServer)
 }
 
 func TestFakeDHCPScopesSkipsWhenFieldsMissing(t *testing.T) {

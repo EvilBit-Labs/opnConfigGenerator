@@ -36,5 +36,7 @@ func TestSerializeDHCPDisabled(t *testing.T) {
 	t.Parallel()
 
 	out := serializer.SerializeDHCP([]model.DHCPScope{{Interface: "lan", Enabled: false}})
-	assert.Empty(t, out.Items["lan"].Enable)
+	lan, ok := out.Items["lan"]
+	require.True(t, ok, "serializer must emit the lan scope even when Enabled=false")
+	assert.Empty(t, lan.Enable)
 }

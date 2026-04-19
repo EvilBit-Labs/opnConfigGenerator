@@ -49,11 +49,15 @@ func TestFakeSystemHostnameIsDNSSafe(t *testing.T) {
 func TestFakeSystemDomainIsLowercaseFQDN(t *testing.T) {
 	t.Parallel()
 
-	_, f := newRand(17)
-	sys := fakeSystem(f)
+	for _, seed := range []int64{1, 2, 3, 42, 100} {
+		_, f := newRand(seed)
+		sys := fakeSystem(f)
 
-	for _, r := range sys.Domain {
-		assert.NotContainsf(t, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", string(r), "domain %q must be lowercase", sys.Domain)
+		for _, r := range sys.Domain {
+			assert.NotContainsf(t, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", string(r),
+				"seed %d: domain %q must be lowercase", seed, sys.Domain)
+		}
+		assert.Containsf(t, sys.Domain, ".",
+			"seed %d: domain %q must contain at least one dot", seed, sys.Domain)
 	}
-	assert.Contains(t, sys.Domain, ".", "domain must contain at least one dot")
 }
