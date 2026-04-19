@@ -17,6 +17,8 @@ const (
 	MaxUniqueVlans = MaxVlanID - MinVlanID + 1
 	// maxNetworkRetries is the maximum attempts to find a unique network.
 	maxNetworkRetries = 100
+	// wanInterfaceCount is the number of WAN interfaces for multi/balanced distribution.
+	wanInterfaceCount = 3
 )
 
 // VlanGenerator produces unique VLAN configurations with seeded randomness.
@@ -32,8 +34,10 @@ type VlanGenerator struct {
 func NewVlanGenerator(seed *int64, wanStrategy WanAssignment) *VlanGenerator {
 	var rng *rand.Rand
 	if seed != nil {
+		//nolint:gosec // Deterministic fake data generation, not security-sensitive
 		rng = rand.New(rand.NewPCG(uint64(*seed), 0))
 	} else {
+		//nolint:gosec // Deterministic fake data generation, not security-sensitive
 		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	}
 
@@ -94,19 +98,36 @@ func (g *VlanGenerator) GenerateBatch(count int) ([]VlanConfig, error) {
 	return configs, nil
 }
 
+// maxVlanIDRandomRetries is the maximum random probing attempts before falling back to sequential scan.
+const maxVlanIDRandomRetries = 1000
+
 // nextUniqueVlanID generates a unique VLAN ID not already in use.
+// Uses random probing first for speed, then falls back to sequential scan to guarantee
+// finding a free ID as long as the pool is not exhausted.
 func (g *VlanGenerator) nextUniqueVlanID() (uint16, error) {
 	if len(g.usedVlanIDs) >= MaxUniqueVlans {
 		return 0, fmt.Errorf("VLAN ID pool exhausted: all %d IDs in use", MaxUniqueVlans)
 	}
 
-	for {
+	// Fast path: random probing (efficient when pool utilization is low).
+	for range maxVlanIDRandomRetries {
+		//nolint:gosec // IntN(4085) yields 0-4084, adding MinVlanID stays within uint16
 		id := uint16(g.rng.IntN(MaxVlanID-MinVlanID+1)) + MinVlanID
 		if !g.usedVlanIDs[id] {
 			g.usedVlanIDs[id] = true
 			return id, nil
 		}
 	}
+
+	// Slow path: sequential scan (guarantees finding a free ID).
+	for id := uint16(MinVlanID); id <= MaxVlanID; id++ {
+		if !g.usedVlanIDs[id] {
+			g.usedVlanIDs[id] = true
+			return id, nil
+		}
+	}
+
+	return 0, fmt.Errorf("VLAN ID pool exhausted: all %d IDs in use", MaxUniqueVlans)
 }
 
 // nextUniqueNetwork generates a unique RFC 1918 /24 network.
@@ -131,9 +152,11 @@ func (g *VlanGenerator) nextWanAssignment() uint8 {
 	switch g.wanStrategy {
 	case WanMulti:
 		g.wanCounter++
-		return uint8((g.wanCounter-1)%3) + 1
+		//nolint:gosec // Modulo wanInterfaceCount yields 0-2, +1 yields 1-3, fits uint8
+		return uint8((g.wanCounter-1)%wanInterfaceCount) + 1
 	case WanBalanced:
-		return uint8(g.rng.IntN(3)) + 1
+		//nolint:gosec // IntN(wanInterfaceCount) yields 0-2, +1 yields 1-3, fits uint8
+		return uint8(g.rng.IntN(wanInterfaceCount)) + 1
 	default:
 		return 1
 	}

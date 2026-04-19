@@ -1,3 +1,4 @@
+// Package netutil provides RFC 1918 network utilities for address generation and validation.
 package netutil
 
 import (
@@ -25,15 +26,26 @@ func IsRFC1918Addr(addr netip.Addr) bool {
 	return ClassA.Contains(addr) || ClassB.Contains(addr) || ClassC.Contains(addr)
 }
 
+// Network generation constants for weighted distribution and addressing.
+const (
+	distributionRange       = 100 // Total weight range for class distribution
+	classAWeight            = 60  // 60% probability for Class A
+	classABCumulativeWeight = 85  // 85% cumulative (60% A + 25% B), remainder is C
+	subnetPrefix            = 24  // All generated networks use /24 prefix
+	maxOctetValue           = 254 // Maximum valid host octet value (1-254)
+	classBSecondOctetBase   = 16  // Class B second octet starts at 172.16.x.x
+	classBSecondOctetSize   = 16  // Class B range spans 16 values (16-31)
+)
+
 // GenerateRandomNetwork generates a random /24 RFC 1918 network.
 // Weighted distribution: 60% Class A, 25% Class B, 15% Class C.
 func GenerateRandomNetwork(rng *rand.Rand) netip.Prefix {
-	roll := rng.IntN(100)
+	roll := rng.IntN(distributionRange)
 
 	switch {
-	case roll < 60:
+	case roll < classAWeight:
 		return generateClassA(rng)
-	case roll < 85:
+	case roll < classABCumulativeWeight:
 		return generateClassB(rng)
 	default:
 		return generateClassC(rng)
@@ -41,23 +53,28 @@ func GenerateRandomNetwork(rng *rand.Rand) netip.Prefix {
 }
 
 func generateClassA(rng *rand.Rand) netip.Prefix {
-	second := uint8(rng.IntN(254) + 1) // 1-254
-	third := uint8(rng.IntN(254) + 1)  // 1-254
+	//nolint:gosec // IntN(254)+1 yields 1-254, always fits uint8
+	second := uint8(rng.IntN(maxOctetValue) + 1)
+	//nolint:gosec // IntN(254)+1 yields 1-254, always fits uint8
+	third := uint8(rng.IntN(maxOctetValue) + 1)
 	addr := netip.AddrFrom4([4]byte{10, second, third, 0})
-	return netip.PrefixFrom(addr, 24)
+	return netip.PrefixFrom(addr, subnetPrefix)
 }
 
 func generateClassB(rng *rand.Rand) netip.Prefix {
-	second := uint8(rng.IntN(16) + 16) // 16-31
-	third := uint8(rng.IntN(254) + 1)  // 1-254
+	//nolint:gosec // IntN(16)+16 yields 16-31, always fits uint8
+	second := uint8(rng.IntN(classBSecondOctetSize) + classBSecondOctetBase)
+	//nolint:gosec // IntN(254)+1 yields 1-254, always fits uint8
+	third := uint8(rng.IntN(maxOctetValue) + 1)
 	addr := netip.AddrFrom4([4]byte{172, second, third, 0})
-	return netip.PrefixFrom(addr, 24)
+	return netip.PrefixFrom(addr, subnetPrefix)
 }
 
 func generateClassC(rng *rand.Rand) netip.Prefix {
-	third := uint8(rng.IntN(254) + 1) // 1-254
+	//nolint:gosec // IntN(254)+1 yields 1-254, always fits uint8
+	third := uint8(rng.IntN(maxOctetValue) + 1)
 	addr := netip.AddrFrom4([4]byte{192, 168, third, 0})
-	return netip.PrefixFrom(addr, 24)
+	return netip.PrefixFrom(addr, subnetPrefix)
 }
 
 // GatewayIP returns the .1 address for a /24 network.

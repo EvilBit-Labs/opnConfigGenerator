@@ -12,7 +12,7 @@ import (
 func TestVpnGenerateConfigs(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVpnGenerator(seedPtr(42))
+	gen := generator.NewVpnGenerator(int64Ptr(42))
 	configs, err := gen.GenerateConfigs(5)
 	require.NoError(t, err)
 	assert.Len(t, configs, 5)
@@ -21,7 +21,7 @@ func TestVpnGenerateConfigs(t *testing.T) {
 func TestVpnZeroCountReturnsNil(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVpnGenerator(seedPtr(42))
+	gen := generator.NewVpnGenerator(int64Ptr(42))
 	configs, err := gen.GenerateConfigs(0)
 	require.NoError(t, err)
 	assert.Nil(t, configs)
@@ -30,7 +30,7 @@ func TestVpnZeroCountReturnsNil(t *testing.T) {
 func TestVpnTunnelSubnetsUnique(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVpnGenerator(seedPtr(42))
+	gen := generator.NewVpnGenerator(int64Ptr(42))
 	configs, err := gen.GenerateConfigs(10)
 	require.NoError(t, err)
 
@@ -45,7 +45,7 @@ func TestVpnTunnelSubnetsUnique(t *testing.T) {
 func TestVpnTunnelSubnetsAreRFC1918(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVpnGenerator(seedPtr(42))
+	gen := generator.NewVpnGenerator(int64Ptr(42))
 	configs, err := gen.GenerateConfigs(10)
 	require.NoError(t, err)
 
@@ -58,7 +58,7 @@ func TestVpnTunnelSubnetsAreRFC1918(t *testing.T) {
 func TestVpnOpenVPNConfig(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVpnGenerator(seedPtr(42))
+	gen := generator.NewVpnGenerator(int64Ptr(42))
 	configs, err := gen.GenerateConfigsOfType(generator.VpnOpenVPN, 3)
 	require.NoError(t, err)
 
@@ -75,7 +75,7 @@ func TestVpnOpenVPNConfig(t *testing.T) {
 func TestVpnWireGuardConfig(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVpnGenerator(seedPtr(42))
+	gen := generator.NewVpnGenerator(int64Ptr(42))
 	configs, err := gen.GenerateConfigsOfType(generator.VpnWireGuard, 3)
 	require.NoError(t, err)
 
@@ -91,7 +91,7 @@ func TestVpnWireGuardConfig(t *testing.T) {
 func TestVpnIPSecConfig(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVpnGenerator(seedPtr(42))
+	gen := generator.NewVpnGenerator(int64Ptr(42))
 	configs, err := gen.GenerateConfigsOfType(generator.VpnIPSec, 3)
 	require.NoError(t, err)
 
@@ -107,7 +107,7 @@ func TestVpnIPSecConfig(t *testing.T) {
 func TestVpnConfigsHaveDescriptions(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVpnGenerator(seedPtr(42))
+	gen := generator.NewVpnGenerator(int64Ptr(42))
 	configs, err := gen.GenerateConfigs(10)
 	require.NoError(t, err)
 
@@ -121,7 +121,7 @@ func TestVpnConfigsHaveDescriptions(t *testing.T) {
 func TestVpnConfigsHaveUniqueIDs(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVpnGenerator(seedPtr(42))
+	gen := generator.NewVpnGenerator(int64Ptr(42))
 	configs, err := gen.GenerateConfigs(20)
 	require.NoError(t, err)
 
@@ -135,13 +135,13 @@ func TestVpnConfigsHaveUniqueIDs(t *testing.T) {
 func TestVpnSubnetExhaustion(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewVpnGenerator(seedPtr(42))
+	gen := generator.NewVpnGenerator(int64Ptr(42))
 	// 254 tunnel subnets available (10.200.1-254.0/24).
 	_, err := gen.GenerateConfigs(254)
 	require.NoError(t, err)
 
 	// 255th should fail.
 	_, err = gen.GenerateConfigs(1)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "exhausted")
 }

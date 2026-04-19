@@ -1,15 +1,23 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"math/rand/v2"
 
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/csvio"
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/generator"
+	"github.com/EvilBit-Labs/opnConfigGenerator/internal/opnsensegen"
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/validate"
-	"github.com/EvilBit-Labs/opnConfigGenerator/internal/xmlgen"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
+)
+
+const (
+	// formatXML is the XML output format identifier.
+	formatXML = "xml"
+	// formatCSV is the CSV output format identifier.
+	formatCSV = "csv"
 )
 
 var (
@@ -44,27 +52,33 @@ Examples:
   # Generate CSV data
   opnConfigGenerator generate --format csv --count 50 --output network-data.csv
 
-  # Generate with VPN and NAT
-  opnConfigGenerator generate --format xml --count 15 --vpn-count 3 --nat-mappings 10`,
+  # Generate with VPN and NAT (CSV only — XML serialization pending)
+  opnConfigGenerator generate --format csv --count 15 --vpn-count 3 --nat-mappings 10`,
 	RunE: runGenerate,
 }
 
 func init() {
 	generateCmd.Flags().StringVar(&format, "format", "", "output format (csv|xml)")
-	_ = generateCmd.MarkFlagRequired("format")
+	if err := generateCmd.MarkFlagRequired("format"); err != nil {
+		panic(fmt.Sprintf("failed to mark format flag required: %v", err))
+	}
 
-	generateCmd.Flags().IntVarP(&count, "count", "c", 10, "number of VLANs to generate (1-10000)")
-	generateCmd.Flags().StringVar(&baseConfig, "base-config", "", "base OPNsense XML template (required for xml format)")
+	//nolint:mnd // CLI flag default value
+	generateCmd.Flags().IntVarP(&count, "count", "c", 10, "number of VLANs to generate (1-4085)")
+	generateCmd.Flags().
+		StringVar(&baseConfig, "base-config", "", "base OPNsense XML template (required for xml format)")
 	generateCmd.Flags().StringVar(&csvFile, "csv-file", "", "read VLANs from existing CSV file")
 
 	generateCmd.Flags().IntVar(&firewallNr, "firewall-nr", 1, "firewall instance number (1-999)")
+	//nolint:mnd // CLI flag default value
 	generateCmd.Flags().IntVar(&optCounter, "opt-counter", 6, "starting interface counter")
 
 	generateCmd.Flags().BoolVar(&force, "force", false, "overwrite existing output files")
 	generateCmd.Flags().Int64Var(&seed, "seed", 0, "RNG seed for reproducibility (0 = random)")
 
 	generateCmd.Flags().BoolVar(&includeFirewallRules, "include-firewall-rules", false, "generate firewall rules")
-	generateCmd.Flags().StringVar(&firewallRuleComplexity, "firewall-rule-complexity", "basic", "complexity (basic|intermediate|advanced)")
+	generateCmd.Flags().
+		StringVar(&firewallRuleComplexity, "firewall-rule-complexity", "basic", "complexity (basic|intermediate|advanced)")
 
 	generateCmd.Flags().StringVar(&vlanRange, "vlan-range", "", "VLAN range spec (e.g., '100-150,200-250')")
 	generateCmd.Flags().IntVar(&vpnCount, "vpn-count", 0, "number of VPN configurations")
@@ -72,20 +86,46 @@ func init() {
 	generateCmd.Flags().StringVar(&wanAssignments, "wan-assignments", "single", "WAN strategy (single|multi|balanced)")
 }
 
+// CLI validation constants.
+const (
+	maxFirewallNr = 999
+	minOptCounter = 0
+)
+
 func runGenerate(_ *cobra.Command, _ []string) error {
 	normalizedFormat := normalizeStringFlag(format)
 
 	// Validate format.
 	switch normalizedFormat {
-	case "csv", "xml":
+	case formatCSV, formatXML:
 		// Valid.
 	default:
 		return fmt.Errorf("invalid format %q: must be csv or xml", format)
 	}
 
 	// XML format requires base config.
-	if normalizedFormat == "xml" && baseConfig == "" {
-		return fmt.Errorf("--base-config is required for xml format")
+	if normalizedFormat == formatXML && baseConfig == "" {
+		return errors.New("--base-config is required for xml format")
+	}
+
+	// Validate count range.
+	if count <= 0 || count > generator.MaxUniqueVlans {
+		return fmt.Errorf("--count must be between 1 and %d, got %d", generator.MaxUniqueVlans, count)
+	}
+
+	// Validate firewallNr range.
+	if firewallNr < 1 || firewallNr > maxFirewallNr {
+		return fmt.Errorf("--firewall-nr must be between 1 and %d, got %d", maxFirewallNr, firewallNr)
+	}
+
+	// Validate optCounter range.
+	if optCounter < minOptCounter {
+		return fmt.Errorf("--opt-counter must be non-negative, got %d", optCounter)
+	}
+
+	// NAT and VPN injection into XML is not yet implemented.
+	if normalizedFormat == formatXML && (natMappings > 0 || vpnCount > 0) {
+		return errors.New("--nat-mappings and --vpn-count are not yet supported for XML output")
 	}
 
 	// Parse WAN assignment strategy.
@@ -116,7 +156,7 @@ func runGenerate(_ *cobra.Command, _ []string) error {
 	}
 
 	// Validate VLANs.
-	result := validate.ValidateVlans(vlans)
+	result := validate.Vlans(vlans)
 	if !result.IsValid() {
 		return result.Error()
 	}
@@ -131,43 +171,28 @@ func runGenerate(_ *cobra.Command, _ []string) error {
 		log.Info("generated firewall rules", "count", len(fwRules))
 	}
 
-	// Generate NAT mappings if requested.
-	var natMaps []generator.NatMapping
-	if natMappings > 0 {
-		natGen := generator.NewNatGenerator(seedPtr)
-		natMaps = natGen.GenerateMappings(vlans, natMappings)
-		log.Info("generated NAT mappings", "count", len(natMaps))
-	}
-
-	// Generate VPN configs if requested.
-	var vpnConfigs []generator.VpnConfig
-	if vpnCount > 0 {
-		vpnGen := generator.NewVpnGenerator(seedPtr)
-		vpnConfigs, err = vpnGen.GenerateConfigs(vpnCount)
-		if err != nil {
-			return fmt.Errorf("generate VPN configs: %w", err)
-		}
-		log.Info("generated VPN configs", "count", len(vpnConfigs))
-	}
-
 	// Output based on format.
 	switch normalizedFormat {
-	case "csv":
+	case formatCSV:
 		return outputCSV(vlans)
-	case "xml":
-		return outputXML(vlans, fwRules, natMaps, vpnConfigs)
+	case formatXML:
+		return outputXML(vlans, fwRules, seedPtr)
 	default:
 		return fmt.Errorf("unsupported format: %s", normalizedFormat)
 	}
 }
 
-func outputCSV(vlans []generator.VlanConfig) error {
+func outputCSV(vlans []generator.VlanConfig) (err error) {
 	w, needClose, err := getOutputWriter()
 	if err != nil {
 		return err
 	}
 	if needClose {
-		defer w.Close()
+		defer func() {
+			if cerr := w.Close(); cerr != nil && err == nil {
+				err = fmt.Errorf("close output file: %w", cerr)
+			}
+		}()
 	}
 
 	if err := csvio.WriteVlanCSV(w, vlans); err != nil {
@@ -181,29 +206,35 @@ func outputCSV(vlans []generator.VlanConfig) error {
 func outputXML(
 	vlans []generator.VlanConfig,
 	fwRules []generator.FirewallRule,
-	_ []generator.NatMapping,
-	_ []generator.VpnConfig,
-) error {
+	seedPtr *int64,
+) (err error) {
 	// Load base config.
-	cfg, err := xmlgen.LoadBaseConfig(baseConfig)
+	cfg, err := opnsensegen.LoadBaseConfig(baseConfig)
 	if err != nil {
 		return fmt.Errorf("load base config: %w", err)
 	}
 
 	// Inject generated data.
-	xmlgen.InjectVlans(cfg, vlans, optCounter)
+	opnsensegen.InjectVlans(cfg, vlans, optCounter)
 
-	// Generate and inject DHCP configs.
-	rng := rand.New(rand.NewPCG(uint64(seed), 0))
+	// Generate and inject DHCP configs using same seed logic as other generators.
+	var rng *rand.Rand
+	if seedPtr != nil {
+		//nolint:gosec // Deterministic fake data generation, not security-sensitive
+		rng = rand.New(rand.NewPCG(uint64(*seedPtr), 0))
+	} else {
+		//nolint:gosec // Deterministic fake data generation, not security-sensitive
+		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+	}
 	dhcpConfigs := make([]generator.DhcpServerConfig, len(vlans))
 	for i, v := range vlans {
 		dhcpConfigs[i] = generator.DeriveDHCPConfig(v, rng)
 	}
-	xmlgen.InjectDHCP(cfg, vlans, dhcpConfigs, optCounter)
+	opnsensegen.InjectDHCP(cfg, dhcpConfigs, optCounter)
 
 	// Inject firewall rules.
 	if len(fwRules) > 0 {
-		xmlgen.InjectFirewallRules(cfg, fwRules)
+		opnsensegen.InjectFirewallRules(cfg, fwRules)
 	}
 
 	// Get output writer.
@@ -212,15 +243,18 @@ func outputXML(
 		return err
 	}
 	if needClose {
-		defer w.Close()
+		defer func() {
+			if cerr := w.Close(); cerr != nil && err == nil {
+				err = fmt.Errorf("close output file: %w", cerr)
+			}
+		}()
 	}
 
 	// Write output.
-	if err := xmlgen.MarshalConfig(cfg, w); err != nil {
+	if err := opnsensegen.MarshalConfig(cfg, w); err != nil {
 		return fmt.Errorf("write XML: %w", err)
 	}
 
 	log.Info("wrote XML output", "vlans", len(vlans), "rules", len(fwRules))
 	return nil
 }
-

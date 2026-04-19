@@ -12,6 +12,7 @@ import (
 func TestDeriveDHCPConfig(t *testing.T) {
 	t.Parallel()
 
+	//nolint:gosec // Deterministic fake data generation, not security-sensitive
 	rng := rand.New(rand.NewPCG(42, 0))
 	network := netip.MustParsePrefix("10.42.7.0/24")
 
@@ -55,6 +56,7 @@ func TestDHCPLeaseTimesByDepartment(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(string(tt.dept), func(t *testing.T) {
 			t.Parallel()
+			//nolint:gosec // Deterministic fake data generation, not security-sensitive
 			rng := rand.New(rand.NewPCG(42, 0))
 			network := netip.MustParsePrefix("10.1.1.0/24")
 			vlan := generator.VlanConfig{
@@ -84,6 +86,7 @@ func TestDHCPStaticReservations(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(string(tt.dept), func(t *testing.T) {
 			t.Parallel()
+			//nolint:gosec // Deterministic fake data generation, not security-sensitive
 			rng := rand.New(rand.NewPCG(42, 0))
 			network := netip.MustParsePrefix("10.1.1.0/24")
 			vlan := generator.VlanConfig{
@@ -99,6 +102,7 @@ func TestDHCPStaticReservations(t *testing.T) {
 func TestDHCPStaticReservationMACs(t *testing.T) {
 	t.Parallel()
 
+	//nolint:gosec // Deterministic fake data generation, not security-sensitive
 	rng := rand.New(rand.NewPCG(42, 0))
 	network := netip.MustParsePrefix("10.1.1.0/24")
 	vlan := generator.VlanConfig{
