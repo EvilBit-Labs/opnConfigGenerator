@@ -9,6 +9,7 @@ package opnsensegen_test
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"strings"
 	"testing"
@@ -54,7 +55,19 @@ func TestConsumerDependencyIsolation(t *testing.T) {
 		"github.com/EvilBit-Labs/opnConfigGenerator/internal/opnsensegen")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Skipf("cannot run `go list -deps` (infrastructure issue, not a regression): %v\n%s", err, output)
+		// Only skip when the go toolchain itself is missing — that is
+		// an environmental issue, not a regression this test can catch.
+		// Everything else (non-zero exit from go list, context timeout,
+		// broken go.mod) is a real signal and must fail the test.
+		var pathErr *exec.Error
+		if errors.Is(err, exec.ErrNotFound) ||
+			(errors.As(err, &pathErr) && errors.Is(pathErr.Err, exec.ErrNotFound)) {
+			t.Skipf("go toolchain unavailable: %v", err)
+		}
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			t.Fatalf("go list -deps timed out after 30s: %v\n%s", err, output)
+		}
+		t.Fatalf("go list -deps failed: %v\n%s", err, output)
 	}
 
 	deps := strings.Split(strings.TrimSpace(string(output)), "\n")

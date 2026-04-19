@@ -33,7 +33,7 @@ tags:
 
 opnDossier's `pkg/` tree is a public Go API surface that external consumers — including opnConfigGenerator — are expected to import. The surface includes `pkg/model` (the platform-agnostic `CommonDevice` and related types), `pkg/parser` (the `Factory` + `XMLDecoder` interface + parser registry), `pkg/parser/opnsense` and `pkg/parser/pfsense` (device-specific parsers with `ConvertDocument` convenience functions), and `pkg/schema/{opnsense,pfsense}` (raw XML schema types). Before NATS-146, no external consumer had exercised the full file → `CommonDevice` pipeline from outside the opnDossier repo, so the consumer contract was asserted but not verified.
 
-The boundary is deliberate (session history): *"Anything that operates on CommonDevice should stay in opnDossier. The public surface covers file → CommonDevice only."* (session history). That means `pkg/` holds parsing and conversion; `internal/sanitizer`, `internal/converter` (enrichment), audit plugins, diff engine, and report builders stay private. Consumers who need those must stay inside opnDossier.
+The boundary is deliberate: *"Anything that operates on CommonDevice should stay in opnDossier. The public surface covers file → CommonDevice only."* That means `pkg/` holds parsing and conversion; `internal/sanitizer`, `internal/converter` (enrichment), audit plugins, diff engine, and report builders stay private. Consumers who need those must stay inside opnDossier.
 
 ## Guidance
 
@@ -62,7 +62,7 @@ if err != nil {
 
 ### 2. If using `Factory`, respect the registration contract
 
-`pkg/parser` follows a `database/sql`-style driver registration pattern. Device parsers register themselves via `init()` inside `pkg/parser/opnsense` and `pkg/parser/pfsense`. You must blank-import at least one of them or `Factory.CreateDevice` returns an "empty registry" error. opnDossier has a regression test (`TestFactory_EmptyRegistry_HintSurfaced`, NATS-144) locking the error message that names the missing blank import, so follow its hint if you hit it. (session history)
+`pkg/parser` follows a `database/sql`-style driver registration pattern. Device parsers register themselves via `init()` inside `pkg/parser/opnsense` and `pkg/parser/pfsense`. You must blank-import at least one of them or `Factory.CreateDevice` returns an "empty registry" error. opnDossier has a regression test upstream locking the error message so it names the missing blank import — follow the hint if you hit it.
 
 ### 3. Round-trip verification tests through XML bytes, not in-memory structs
 
@@ -78,11 +78,11 @@ A consumer-facing test that marshals to XML and re-parses proves the pipeline wo
 
 ### 6. CRITICAL: redact before exporting a CommonDevice
 
-**`pkg/model/CommonDevice` contains credential fields that opnDossier's public surface does NOT redact automatically.** A consumer that marshals `CommonDevice` directly to JSON, YAML, or XML **will leak secrets.** (session history)
+**`pkg/model/CommonDevice` contains credential fields that opnDossier's public surface does NOT redact automatically.** A consumer that marshals `CommonDevice` directly to JSON, YAML, or XML **will leak secrets.**
 
 The redaction logic lives in `internal/sanitizer/` and `internal/converter/` on the opnDossier side and is not exported via `pkg/`. Public API consumers must implement their own redaction pass before writing a `CommonDevice` to disk, logs, or a network response.
 
-Secret-bearing fields confirmed in `pkg/model` as of opnDossier v1.4.0:
+Known secret-bearing fields in `pkg/model` as of opnDossier v1.4.0 (non-exhaustive — re-audit on every opnDossier bump):
 
 | Field                             | File                        | Notes                    |
 | --------------------------------- | --------------------------- | ------------------------ |
@@ -101,8 +101,8 @@ Until opnDossier exports public redaction helpers on `CommonDevice`, treat the u
 
 ### 8. Watch for stack-specific quirks
 
-- **pfSense parser ignores the injected `XMLDecoder`** — pfSense's `Parser` self-manages XML decoding. Consumers using the `Factory` path should know this; the injected decoder is respected by the OPNsense parser only. (session history)
-- **`KeaDhcp4` decodes silently** — if it matters to your consumer, check for empty fields after conversion. (session history, NATS-3)
+- **pfSense parser ignores the injected `XMLDecoder`** — pfSense's `Parser` self-manages XML decoding. Consumers using the `Factory` path should know this; the injected decoder is respected by the OPNsense parser only.
+- **`KeaDhcp4` decodes silently** — if it matters to your consumer, check for empty fields after conversion.
 
 ## Why This Matters
 
@@ -242,4 +242,4 @@ This is a stopgap — track [opnDossier#NATS-146 follow-up](https://evilbitlabs.
 - `internal/opnsensegen/template.go` — `ParseConfig`, `MarshalConfig`, `LoadBaseConfig` helpers
 - `CONTRIBUTING.md` — already forbids duplicating opnDossier schema types locally
 - `GOTCHAS.md` §7 "CommonDevice to Device Serializer" — reserved for any `ConversionWarning`s or serialization quirks observed in consumer runs
-- Upstream `docs/development/public-api.md` (in opnDossier repo) — authoritative API stability policy (session history)
+- Upstream `docs/development/public-api.md` (in opnDossier repo) — authoritative API stability policy

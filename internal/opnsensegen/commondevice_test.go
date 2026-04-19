@@ -100,9 +100,11 @@ func TestCommonDeviceMinimalConfig(t *testing.T) {
 	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
 	require.NoError(t, err)
 
-	device, _, err := opnsenseparser.ConvertDocument(cfg)
+	device, warnings, err := opnsenseparser.ConvertDocument(cfg)
 	require.NoError(t, err)
 	require.NotNil(t, device)
+	assert.Empty(t, warnings,
+		"minimal config produced %d ConversionWarning(s): %+v", len(warnings), warnings)
 
 	assert.Equal(t, model.DeviceTypeOPNsense, device.DeviceType)
 	assert.Equal(t, "opnsense", device.System.Hostname)
