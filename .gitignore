@@ -68,6 +68,7 @@ CHANGELOG.md
 .claude/settings.local.json
 .cursor/
 CLAUDE.md
+.context/
 
 # Documentation build artifacts
 docs/plans/
