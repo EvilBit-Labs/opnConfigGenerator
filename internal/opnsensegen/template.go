@@ -182,8 +182,10 @@ func emitSortedChildren(dec *xml.Decoder, enc *xml.Encoder, start xml.StartEleme
 			// At depth 0 (between children) we silently drop indentation
 			// whitespace because the encoder re-indents on emit. A
 			// non-whitespace token here (user-authored comment, CDATA,
-			// processing instruction) is preserved-but-warned so operators
-			// can see annotations were dropped from their base config.
+			// processing instruction) is dropped with a warning so
+			// operators can see annotations were lost from their base
+			// config — the sort post-processor cannot place inter-child
+			// tokens back in a stable position after reordering.
 			switch tok := t.(type) {
 			case xml.CharData:
 				if len(bytes.TrimSpace(tok)) > 0 {

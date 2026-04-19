@@ -15,7 +15,9 @@ func TestNewCommonDeviceDefaults(t *testing.T) {
 	dev, err := NewCommonDevice()
 	require.NoError(t, err)
 	require.NotNil(t, dev)
-	assert.Equal(t, model.DeviceTypeOPNsense, dev.DeviceType)
+	// Faker is target-neutral; DeviceType defaults to the zero value
+	// (unset). Callers that need a concrete target pass WithDeviceType.
+	assert.Empty(t, string(dev.DeviceType))
 	assert.NotEmpty(t, dev.System.Hostname)
 	assert.NotEmpty(t, dev.System.Domain)
 	assert.Len(t, dev.Interfaces, 2, "default shape: WAN + LAN, no VLANs")
@@ -23,6 +25,14 @@ func TestNewCommonDeviceDefaults(t *testing.T) {
 	assert.Empty(t, dev.FirewallRules)
 	// LAN is the only static interface → one DHCP scope.
 	assert.Len(t, dev.DHCP, 1)
+}
+
+func TestNewCommonDeviceDeviceTypeOption(t *testing.T) {
+	t.Parallel()
+
+	dev, err := NewCommonDevice(WithDeviceType(model.DeviceTypeOPNsense))
+	require.NoError(t, err)
+	assert.Equal(t, model.DeviceTypeOPNsense, dev.DeviceType)
 }
 
 func TestNewCommonDeviceDeterministic(t *testing.T) {

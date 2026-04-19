@@ -7,6 +7,8 @@ import (
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/faker"
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/opnsensegen"
 	serializer "github.com/EvilBit-Labs/opnConfigGenerator/internal/serializer/opnsense"
+	"github.com/EvilBit-Labs/opnDossier/pkg/model"
+	"github.com/EvilBit-Labs/opnDossier/pkg/schema/opnsense"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 )
@@ -73,6 +75,29 @@ func init() {
 	generateCmd.Flags().StringVar(&domainOverride, "domain", "", "override the generated domain")
 }
 
+// buildOpnSenseDocument routes the serialize step. When --base-config is set
+// we go through Overlay (which serializes the device against the loaded base);
+// otherwise we call Serialize directly. Keeping the branch here means the XML
+// path never serializes the device twice.
+func buildOpnSenseDocument(device *model.CommonDevice) (*opnsense.OpnSenseDocument, error) {
+	if baseConfigPath == "" {
+		doc, err := serializer.Serialize(device)
+		if err != nil {
+			return nil, fmt.Errorf("serialize: %w", err)
+		}
+		return doc, nil
+	}
+	base, err := opnsensegen.LoadBaseConfig(baseConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("load base config: %w", err)
+	}
+	doc, err := serializer.Overlay(base, device)
+	if err != nil {
+		return nil, fmt.Errorf("overlay: %w", err)
+	}
+	return doc, nil
+}
+
 func runGenerate(_ *cobra.Command, _ []string) (err error) {
 	format := normalizeStringFlag(outputFormat)
 	switch format {
@@ -95,6 +120,9 @@ func runGenerate(_ *cobra.Command, _ []string) (err error) {
 		faker.WithFirewallRules(includeFirewall),
 		faker.WithHostname(hostnameOverride),
 		faker.WithDomain(domainOverride),
+		// Today the CLI always targets OPNsense; when the pfSense
+		// serializer lands, route this by a user-facing flag.
+		faker.WithDeviceType(model.DeviceTypeOPNsense),
 	)
 	if err != nil {
 		return fmt.Errorf("generate device: %w", err)
@@ -120,19 +148,9 @@ func runGenerate(_ *cobra.Command, _ []string) (err error) {
 		log.Info("wrote CSV output", "vlans", len(device.VLANs))
 		return nil
 	case formatXML:
-		doc, sErr := serializer.Serialize(device)
+		doc, sErr := buildOpnSenseDocument(device)
 		if sErr != nil {
-			return fmt.Errorf("serialize: %w", sErr)
-		}
-		if baseConfigPath != "" {
-			base, lErr := opnsensegen.LoadBaseConfig(baseConfigPath)
-			if lErr != nil {
-				return fmt.Errorf("load base config: %w", lErr)
-			}
-			doc, sErr = serializer.Overlay(base, device)
-			if sErr != nil {
-				return fmt.Errorf("overlay: %w", sErr)
-			}
+			return sErr
 		}
 		if mErr := opnsensegen.MarshalConfig(doc, w); mErr != nil {
 			return fmt.Errorf("write XML: %w", mErr)

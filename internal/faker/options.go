@@ -1,5 +1,7 @@
 package faker
 
+import "github.com/EvilBit-Labs/opnDossier/pkg/model"
+
 // Option configures the faker pipeline.
 type Option func(*config)
 
@@ -9,6 +11,7 @@ type config struct {
 	firewallRules bool
 	hostname      string
 	domain        string
+	deviceType    model.DeviceType
 }
 
 // WithSeed sets a deterministic RNG seed. A seed of 0 is the sentinel for
@@ -35,4 +38,13 @@ func WithHostname(h string) Option {
 // WithDomain overrides the faker-generated domain.
 func WithDomain(d string) Option {
 	return func(c *config) { c.domain = d }
+}
+
+// WithDeviceType sets the target device type on the produced CommonDevice.
+// The faker itself is target-neutral (pure data generation); callers that
+// intend to serialize for a specific target set the type here. The default
+// is the zero value (unset); callers can pass model.DeviceTypeOPNsense,
+// model.DeviceTypePfSense, etc.
+func WithDeviceType(dt model.DeviceType) Option {
+	return func(c *config) { c.deviceType = dt }
 }

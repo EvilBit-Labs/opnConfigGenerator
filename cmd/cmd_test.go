@@ -33,6 +33,10 @@ func newTestRootCmd() *cobra.Command {
 	output = ""
 	quiet = false
 	noColor = false
+	// validate subcommand globals (defined in cmd/validate.go).
+	inputFile = ""
+	inputFormat = ""
+	maxErrors = 10
 
 	root := &cobra.Command{
 		Use:     "opnConfigGenerator",

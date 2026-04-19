@@ -25,6 +25,7 @@ func TestRoundTrip(t *testing.T) {
 		faker.WithSeed(2026),
 		faker.WithVLANCount(3),
 		faker.WithFirewallRules(true),
+		faker.WithDeviceType(model.DeviceTypeOPNsense),
 	)
 	require.NoError(t, err)
 

@@ -33,6 +33,7 @@ func TestCommonDeviceRoundTripViaSerializer(t *testing.T) {
 		faker.WithVLANCount(2),
 		// Phase 1 includes filter serialization — exercise it end-to-end.
 		faker.WithFirewallRules(true),
+		faker.WithDeviceType(model.DeviceTypeOPNsense),
 	)
 	require.NoError(t, err)
 	require.NotEmpty(t, original.FirewallRules, "test precondition: faker must emit firewall rules")

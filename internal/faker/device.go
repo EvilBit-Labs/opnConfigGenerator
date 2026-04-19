@@ -57,7 +57,7 @@ func NewCommonDevice(opts ...Option) (*model.CommonDevice, error) {
 	}
 
 	return &model.CommonDevice{
-		DeviceType:    model.DeviceTypeOPNsense,
+		DeviceType:    cfg.deviceType,
 		System:        sys,
 		Interfaces:    net.Interfaces,
 		VLANs:         net.VLANs,
