@@ -2,13 +2,12 @@ package opnsensegen_test
 
 import (
 	"bytes"
-	"math/rand/v2"
-	"net/netip"
+	"errors"
 	"strings"
 	"testing"
 
-	"github.com/EvilBit-Labs/opnConfigGenerator/internal/generator"
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/opnsensegen"
+	"github.com/EvilBit-Labs/opnDossier/pkg/schema/opnsense"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,6 +21,14 @@ func TestLoadBaseConfig(t *testing.T) {
 	assert.Equal(t, "1.0", cfg.Version)
 	assert.Equal(t, "opnsense", cfg.System.Hostname)
 	assert.Equal(t, "localdomain", cfg.System.Domain)
+}
+
+func TestLoadBaseConfigMissingFile(t *testing.T) {
+	t.Parallel()
+
+	_, err := opnsensegen.LoadBaseConfig("does-not-exist.xml")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "read base config")
 }
 
 func TestParseConfig(t *testing.T) {
@@ -43,95 +50,15 @@ func TestParseConfig(t *testing.T) {
 	cfg, err := opnsensegen.ParseConfig(xmlData)
 	require.NoError(t, err)
 	assert.Equal(t, "test", cfg.System.Hostname)
+	assert.Equal(t, "test.local", cfg.System.Domain)
 }
 
-func TestInjectVlans(t *testing.T) {
+func TestParseConfigInvalidXML(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
-	require.NoError(t, err)
-
-	vlans := []generator.VlanConfig{
-		{VlanID: 42, IPNetwork: netip.MustParsePrefix("10.42.7.0/24"), Description: "IT VLAN 42", WanAssignment: 1},
-		{
-			VlanID:        100,
-			IPNetwork:     netip.MustParsePrefix("10.100.0.0/24"),
-			Description:   "Sales VLAN 100",
-			WanAssignment: 2,
-		},
-	}
-
-	opnsensegen.InjectVlans(cfg, vlans, 6)
-
-	assert.Len(t, cfg.VLANs.VLAN, 2)
-	assert.Equal(t, "42", cfg.VLANs.VLAN[0].Tag)
-	assert.Equal(t, "IT VLAN 42", cfg.VLANs.VLAN[0].Descr)
-
-	// Verify interfaces were added to the map.
-	assert.Len(t, cfg.Interfaces.Items, 2)
-	opt6, ok := cfg.Interfaces.Items["opt6"]
-	require.True(t, ok)
-	assert.Equal(t, "10.42.7.1", opt6.IPAddr)
-	assert.Equal(t, "IT VLAN 42", opt6.Descr)
-}
-
-func TestInjectFirewallRules(t *testing.T) {
-	t.Parallel()
-
-	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
-	require.NoError(t, err)
-
-	rules := []generator.FirewallRule{
-		{
-			RuleID: "r1", Action: "pass", Protocol: "tcp", Direction: "in",
-			Source: "10.1.1.0/24", Destination: "any", Ports: "80,443",
-			Description: "Allow HTTP", Interface: "opt6", Tracker: 12345,
-		},
-		{
-			RuleID: "r2", Action: "block", Protocol: "any", Direction: "in",
-			Source: "any", Destination: "any", Ports: "any",
-			Description: "Block all", Interface: "opt6", Tracker: 67890, Log: true,
-		},
-	}
-
-	opnsensegen.InjectFirewallRules(cfg, rules)
-	assert.Len(t, cfg.Filter.Rule, 2)
-	assert.Equal(t, "pass", cfg.Filter.Rule[0].Type)
-	assert.Equal(t, "Allow HTTP", cfg.Filter.Rule[0].Descr)
-
-	// Verify "any" source path produces Source.Any field.
-	assert.NotNil(t, cfg.Filter.Rule[1].Source.Any, "source 'any' should set Any field")
-	assert.Empty(t, cfg.Filter.Rule[1].Source.Network, "source 'any' should not set Network")
-}
-
-func TestInjectDHCP(t *testing.T) {
-	t.Parallel()
-
-	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
-	require.NoError(t, err)
-
-	//nolint:gosec // Deterministic fake data generation, not security-sensitive
-	rng := rand.New(rand.NewPCG(42, 0))
-	vlans := []generator.VlanConfig{
-		{
-			VlanID:        42,
-			IPNetwork:     netip.MustParsePrefix("10.42.7.0/24"),
-			Description:   "IT",
-			WanAssignment: 1,
-			Department:    generator.DeptIT,
-		},
-	}
-	dhcpConfigs := []generator.DhcpServerConfig{
-		generator.DeriveDHCPConfig(vlans[0], rng),
-	}
-
-	opnsensegen.InjectDHCP(cfg, dhcpConfigs, 6)
-
-	// Verify DHCP was added to the map.
-	assert.Len(t, cfg.Dhcpd.Items, 1)
-	dhcpIface, ok := cfg.Dhcpd.Items["opt6"]
-	require.True(t, ok)
-	assert.Equal(t, "1", dhcpIface.Enable)
+	_, err := opnsensegen.ParseConfig([]byte("not xml"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parse config XML")
 }
 
 func TestMarshalRoundTrip(t *testing.T) {
@@ -141,8 +68,7 @@ func TestMarshalRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	err = opnsensegen.MarshalConfig(cfg, &buf)
-	require.NoError(t, err)
+	require.NoError(t, opnsensegen.MarshalConfig(cfg, &buf))
 
 	output := buf.String()
 	assert.Contains(t, output, "<?xml")
@@ -151,53 +77,132 @@ func TestMarshalRoundTrip(t *testing.T) {
 	assert.Contains(t, output, "</opnsense>")
 }
 
-func TestMarshalWithInjectedData(t *testing.T) {
-	t.Parallel()
-
-	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
-	require.NoError(t, err)
-
-	vlans := []generator.VlanConfig{
-		{VlanID: 42, IPNetwork: netip.MustParsePrefix("10.42.7.0/24"), Description: "IT VLAN 42", WanAssignment: 1},
-	}
-
-	opnsensegen.InjectVlans(cfg, vlans, 6)
-
-	var buf bytes.Buffer
-	err = opnsensegen.MarshalConfig(cfg, &buf)
-	require.NoError(t, err)
-
-	output := buf.String()
-	assert.Contains(t, output, "<tag>42</tag>")
-	assert.Contains(t, output, "IT VLAN 42")
-	assert.Contains(t, output, "10.42.7.1")
+// countingWriter records the number of Write calls so we can verify the
+// atomic-write contract: MarshalConfig buffers the full document in memory
+// and performs exactly one Write when encode/stabilize succeed.
+type countingWriter struct {
+	writes int
+	err    error
+	buf    bytes.Buffer
 }
 
-func TestMarshalXMLEscaping(t *testing.T) {
+func (w *countingWriter) Write(p []byte) (int, error) {
+	w.writes++
+	if w.err != nil {
+		return 0, w.err
+	}
+	return w.buf.Write(p)
+}
+
+func TestMarshalConfigIsAtomicOnSuccess(t *testing.T) {
 	t.Parallel()
 
 	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
 	require.NoError(t, err)
 
-	vlans := []generator.VlanConfig{
-		{
-			VlanID:        42,
-			IPNetwork:     netip.MustParsePrefix("10.42.7.0/24"),
-			Description:   "Test & <Special> \"Chars\"",
-			WanAssignment: 1,
+	w := &countingWriter{}
+	require.NoError(t, opnsensegen.MarshalConfig(cfg, w))
+
+	assert.Equal(t, 1, w.writes, "MarshalConfig must perform exactly one Write on success")
+}
+
+func TestMarshalConfigDoesNotWriteOnWriterFailure(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
+	require.NoError(t, err)
+
+	sentinel := errors.New("disk full")
+	w := &countingWriter{err: sentinel}
+	err = opnsensegen.MarshalConfig(cfg, w)
+
+	require.ErrorIs(t, err, sentinel)
+	// The writer saw exactly one attempt — no header-first / body-second
+	// partial write pattern.
+	assert.Equal(t, 1, w.writes)
+	assert.Zero(t, w.buf.Len(), "failing writer must not accumulate partial output")
+}
+
+// TestMarshalConfigSortsMapBackedSections exercises the token-stream
+// stabilizer by constructing a document with children that would iterate
+// in non-alphabetical order under Go's randomized map iteration, then
+// asserts the output is ordered.
+func TestMarshalConfigSortsMapBackedSections(t *testing.T) {
+	t.Parallel()
+
+	cfg := &opnsense.OpnSenseDocument{
+		Version: "1.0",
+		System:  opnsense.System{Hostname: "test", Domain: "test.local"},
+		Interfaces: opnsense.Interfaces{
+			Items: map[string]opnsense.Interface{
+				"zeta":  {If: "igb0", Enable: "1"},
+				"alpha": {If: "igb1", Enable: "1"},
+				"mu":    {If: "igb2", Enable: "1"},
+			},
 		},
 	}
 
-	opnsensegen.InjectVlans(cfg, vlans, 6)
+	var buf bytes.Buffer
+	require.NoError(t, opnsensegen.MarshalConfig(cfg, &buf))
+
+	out := buf.String()
+	iAlpha := strings.Index(out, "<alpha>")
+	iMu := strings.Index(out, "<mu>")
+	iZeta := strings.Index(out, "<zeta>")
+	require.NotEqual(t, -1, iAlpha, "alpha must appear")
+	require.NotEqual(t, -1, iMu, "mu must appear")
+	require.NotEqual(t, -1, iZeta, "zeta must appear")
+	assert.Less(t, iAlpha, iMu, "alpha must appear before mu")
+	assert.Less(t, iMu, iZeta, "mu must appear before zeta")
+}
+
+func TestMarshalConfigHandlesEmptyMapBackedSections(t *testing.T) {
+	t.Parallel()
+
+	cfg := &opnsense.OpnSenseDocument{
+		Version:    "1.0",
+		System:     opnsense.System{Hostname: "test", Domain: "test.local"},
+		Interfaces: opnsense.Interfaces{Items: map[string]opnsense.Interface{}},
+		Dhcpd:      opnsense.Dhcpd{Items: map[string]opnsense.DhcpdInterface{}},
+	}
 
 	var buf bytes.Buffer
-	err = opnsensegen.MarshalConfig(cfg, &buf)
-	require.NoError(t, err)
+	require.NoError(t, opnsensegen.MarshalConfig(cfg, &buf))
 
-	output := buf.String()
-	// XML encoder should escape special characters.
-	assert.Contains(t, output, "&amp;")
-	assert.Contains(t, output, "&lt;Special&gt;")
-	assert.True(t, strings.Contains(output, "&#34;Chars&#34;") || strings.Contains(output, "&quot;Chars&quot;"),
-		"quotes should be escaped")
+	out := buf.String()
+	// Empty map-backed sections must round-trip without error and must
+	// still be well-formed XML.
+	assert.Contains(t, out, "<opnsense>")
+	assert.Contains(t, out, "</opnsense>")
+}
+
+// TestMarshalConfigByteStableMapIteration runs MarshalConfig 20 times on the
+// same input. Go's map iteration is randomized per encode, so without the
+// sort post-processor, iterations diverge. 20 is high enough to defeat
+// randomization luck.
+func TestMarshalConfigByteStableMapIteration(t *testing.T) {
+	t.Parallel()
+
+	cfg := &opnsense.OpnSenseDocument{
+		Version: "1.0",
+		System:  opnsense.System{Hostname: "test", Domain: "test.local"},
+		Interfaces: opnsense.Interfaces{
+			Items: map[string]opnsense.Interface{
+				"wan":  {If: "igb0", Enable: "1", IPAddr: "dhcp"},
+				"lan":  {If: "igb1", Enable: "1", IPAddr: "192.168.1.1", Subnet: "24"},
+				"opt1": {If: "igb2", Enable: "1", IPAddr: "10.0.0.1", Subnet: "24"},
+				"opt2": {If: "igb3", Enable: "1", IPAddr: "10.0.1.1", Subnet: "24"},
+				"opt3": {If: "igb4", Enable: "1", IPAddr: "10.0.2.1", Subnet: "24"},
+			},
+		},
+	}
+
+	var first bytes.Buffer
+	require.NoError(t, opnsensegen.MarshalConfig(cfg, &first))
+
+	for i := range 20 {
+		var next bytes.Buffer
+		require.NoError(t, opnsensegen.MarshalConfig(cfg, &next))
+		require.Equalf(t, first.Bytes(), next.Bytes(), "iteration %d diverged", i+1)
+	}
 }

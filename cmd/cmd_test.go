@@ -16,9 +16,28 @@ import (
 // newTestRootCmd creates a fresh command tree to avoid state leakage between tests.
 // Each test gets its own root command with all subcommands attached.
 //
-// NOTE: Because cobra flag bindings point to package-level variables (quiet, noColor,
-// output, format, etc.), tests that call this function must NOT run in parallel.
+// NOTE: Because cobra flag bindings point to package-level variables, tests
+// that call this function must NOT run in parallel.
 func newTestRootCmd() *cobra.Command {
+	// Reset package-level flag vars to their defaults before rebuilding the
+	// command tree. This matters because Cobra wires flags to these variables
+	// directly; state leaks across tests otherwise.
+	outputFormat = formatXML
+	vlanCount = defaultVlanCount
+	baseConfigPath = ""
+	includeFirewall = false
+	seed = 0
+	force = false
+	hostnameOverride = ""
+	domainOverride = ""
+	output = ""
+	quiet = false
+	noColor = false
+	// validate subcommand globals (defined in cmd/validate.go).
+	inputFile = ""
+	inputFormat = ""
+	maxErrors = 10
+
 	root := &cobra.Command{
 		Use:     "opnConfigGenerator",
 		Short:   "Generate realistic OPNsense configuration files with fake data",
@@ -37,23 +56,14 @@ func newTestRootCmd() *cobra.Command {
 		Short: "Generate OPNsense configuration data",
 		RunE:  runGenerate,
 	}
-	genCmd.Flags().StringVar(&format, "format", "", "output format (csv|xml)")
-	if err := genCmd.MarkFlagRequired("format"); err != nil {
-		panic(err)
-	}
-	genCmd.Flags().IntVarP(&count, "count", "c", 10, "number of VLANs to generate (1-10000)")
-	genCmd.Flags().StringVar(&baseConfig, "base-config", "", "base OPNsense XML template")
-	genCmd.Flags().StringVar(&csvFile, "csv-file", "", "read VLANs from existing CSV file")
-	genCmd.Flags().IntVar(&firewallNr, "firewall-nr", 1, "firewall instance number")
-	genCmd.Flags().IntVar(&optCounter, "opt-counter", 6, "starting interface counter")
-	genCmd.Flags().BoolVar(&force, "force", false, "overwrite existing output files")
+	genCmd.Flags().StringVar(&outputFormat, "format", formatXML, "output format (xml|csv)")
+	genCmd.Flags().IntVarP(&vlanCount, "vlan-count", "n", defaultVlanCount, "number of VLANs to generate (0-4093)")
+	genCmd.Flags().StringVar(&baseConfigPath, "base-config", "", "optional base OPNsense config.xml")
+	genCmd.Flags().BoolVar(&includeFirewall, "firewall-rules", false, "include default firewall rules")
 	genCmd.Flags().Int64Var(&seed, "seed", 0, "RNG seed for reproducibility")
-	genCmd.Flags().BoolVar(&includeFirewallRules, "include-firewall-rules", false, "generate firewall rules")
-	genCmd.Flags().StringVar(&firewallRuleComplexity, "firewall-rule-complexity", "basic", "complexity")
-	genCmd.Flags().StringVar(&vlanRange, "vlan-range", "", "VLAN range spec")
-	genCmd.Flags().IntVar(&vpnCount, "vpn-count", 0, "number of VPN configurations")
-	genCmd.Flags().IntVar(&natMappings, "nat-mappings", 0, "number of NAT rules")
-	genCmd.Flags().StringVar(&wanAssignments, "wan-assignments", "single", "WAN strategy")
+	genCmd.Flags().BoolVar(&force, "force", false, "overwrite existing output file")
+	genCmd.Flags().StringVar(&hostnameOverride, "hostname", "", "override the generated hostname")
+	genCmd.Flags().StringVar(&domainOverride, "domain", "", "override the generated domain")
 
 	valCmd := &cobra.Command{
 		Use:   "validate",
@@ -105,8 +115,8 @@ func executeCommand(root *cobra.Command, args ...string) (string, error) {
 	return stdoutBuf.String(), err
 }
 
-// baseConfigPath returns the absolute path to the base-config.xml test fixture.
-func baseConfigPath(t *testing.T) string {
+// baseConfigFixture returns the absolute path to the base-config.xml fixture.
+func baseConfigFixture(t *testing.T) string {
 	t.Helper()
 	abs, err := filepath.Abs(filepath.Join("..", "testdata", "base-config.xml"))
 	require.NoError(t, err)
@@ -134,11 +144,19 @@ func TestRootVersion(t *testing.T) {
 
 // --- Generate Command Tests ---
 
-func TestGenerateMissingFormat(t *testing.T) {
+func TestGenerateZeroArgsProducesXML(t *testing.T) {
+	tmpDir := t.TempDir()
+	outPath := filepath.Join(tmpDir, "default.xml")
+
 	cmd := newTestRootCmd()
-	_, err := executeCommand(cmd, "generate")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "format")
+	_, err := executeCommand(cmd, "generate", "--seed", "1", "--output", outPath)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "<?xml")
+	assert.Contains(t, content, "<opnsense>")
 }
 
 func TestGenerateInvalidFormat(t *testing.T) {
@@ -153,34 +171,52 @@ func TestGenerateCSVToFile(t *testing.T) {
 	outPath := filepath.Join(tmpDir, "vlans.csv")
 
 	cmd := newTestRootCmd()
-	_, err := executeCommand(cmd, "generate", "--format", "csv", "--count", "5", "--seed", "42", "--output", outPath)
+	_, err := executeCommand(cmd, "generate",
+		"--format", "csv",
+		"--vlan-count", "5",
+		"--seed", "42",
+		"--output", outPath,
+	)
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(outPath)
 	require.NoError(t, err)
 	content := string(data)
-	// CSV uses German headers with UTF-8 BOM prefix.
 	lines := strings.Split(strings.TrimSpace(content), "\n")
-	assert.Len(t, lines, 6, "expected header + 5 data rows")
+	assert.Len(t, lines, 6, "header + 5 data rows")
 	assert.Contains(t, lines[0], "VLAN")
 }
 
-func TestGenerateXMLRequiresBaseConfig(t *testing.T) {
+func TestGenerateXMLWithoutBaseConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	outPath := filepath.Join(tmpDir, "scratch.xml")
+
 	cmd := newTestRootCmd()
-	_, err := executeCommand(cmd, "generate", "--format", "xml")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--base-config is required")
+	_, err := executeCommand(cmd,
+		"generate",
+		"--vlan-count", "3",
+		"--seed", "42",
+		"--output", outPath,
+	)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "<?xml")
+	assert.Contains(t, content, "<opnsense>")
+	assert.Contains(t, content, "<vlans>")
 }
 
 func TestGenerateXMLWithBaseConfig(t *testing.T) {
 	tmpDir := t.TempDir()
-	outPath := filepath.Join(tmpDir, "output.xml")
-	baseCfgPath := baseConfigPath(t)
+	outPath := filepath.Join(tmpDir, "overlay.xml")
+	baseCfgPath := baseConfigFixture(t)
 
 	cmd := newTestRootCmd()
 	_, err := executeCommand(cmd,
-		"generate", "--format", "xml",
-		"--count", "3",
+		"generate",
+		"--vlan-count", "3",
 		"--base-config", baseCfgPath,
 		"--seed", "42",
 		"--output", outPath,
@@ -195,52 +231,31 @@ func TestGenerateXMLWithBaseConfig(t *testing.T) {
 	assert.Contains(t, content, "<vlans>")
 }
 
-func TestGenerateCSVThreeRows(t *testing.T) {
-	tmpDir := t.TempDir()
-	outPath := filepath.Join(tmpDir, "vlans.csv")
-
+func TestGenerateBaseConfigMissing(t *testing.T) {
 	cmd := newTestRootCmd()
-	_, err := executeCommand(cmd, "generate", "--format", "csv", "--count", "3", "--seed", "42", "--output", outPath)
-	require.NoError(t, err)
-
-	data, err := os.ReadFile(outPath)
-	require.NoError(t, err)
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	assert.Len(t, lines, 4, "expected header + 3 data rows")
+	_, err := executeCommand(cmd, "generate", "--base-config", "/does/not/exist.xml")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "load base config")
 }
 
 func TestGenerateDeterministicSeed(t *testing.T) {
 	tmpDir := t.TempDir()
-	outPath1 := filepath.Join(tmpDir, "run1.csv")
-	outPath2 := filepath.Join(tmpDir, "run2.csv")
+	outPath1 := filepath.Join(tmpDir, "run1.xml")
+	outPath2 := filepath.Join(tmpDir, "run2.xml")
 
 	cmd1 := newTestRootCmd()
-	_, err := executeCommand(
-		cmd1,
-		"generate",
-		"--format",
-		"csv",
-		"--count",
-		"5",
-		"--seed",
-		"42",
-		"--output",
-		outPath1,
+	_, err := executeCommand(cmd1, "generate",
+		"--vlan-count", "5",
+		"--seed", "42",
+		"--output", outPath1,
 	)
 	require.NoError(t, err)
 
 	cmd2 := newTestRootCmd()
-	_, err = executeCommand(
-		cmd2,
-		"generate",
-		"--format",
-		"csv",
-		"--count",
-		"5",
-		"--seed",
-		"42",
-		"--output",
-		outPath2,
+	_, err = executeCommand(cmd2, "generate",
+		"--vlan-count", "5",
+		"--seed", "42",
+		"--output", outPath2,
 	)
 	require.NoError(t, err)
 
@@ -248,102 +263,188 @@ func TestGenerateDeterministicSeed(t *testing.T) {
 	require.NoError(t, err)
 	data2, err := os.ReadFile(outPath2)
 	require.NoError(t, err)
-	assert.Equal(t, string(data1), string(data2), "same seed should produce identical output")
+	assert.Equal(t, string(data1), string(data2), "same seed must produce byte-identical output")
 }
 
 func TestGenerateFileExistsWithoutForce(t *testing.T) {
 	tmpDir := t.TempDir()
-	outPath := filepath.Join(tmpDir, "existing.csv")
-
+	outPath := filepath.Join(tmpDir, "existing.xml")
 	require.NoError(t, os.WriteFile(outPath, []byte("existing"), 0o600))
 
 	cmd := newTestRootCmd()
-	_, err := executeCommand(cmd, "generate", "--format", "csv", "--count", "3", "--seed", "42", "--output", outPath)
+	_, err := executeCommand(cmd, "generate", "--seed", "42", "--output", outPath)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already exists")
 }
 
 func TestGenerateFileExistsWithForce(t *testing.T) {
 	tmpDir := t.TempDir()
-	outPath := filepath.Join(tmpDir, "overwrite.csv")
-
+	outPath := filepath.Join(tmpDir, "overwrite.xml")
 	require.NoError(t, os.WriteFile(outPath, []byte("old"), 0o600))
 
 	cmd := newTestRootCmd()
-	_, err := executeCommand(
-		cmd,
-		"generate",
-		"--format",
-		"csv",
-		"--count",
-		"3",
-		"--seed",
-		"42",
-		"--output",
-		outPath,
+	_, err := executeCommand(cmd, "generate",
+		"--seed", "42",
+		"--output", outPath,
 		"--force",
 	)
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(outPath)
 	require.NoError(t, err)
-	assert.Contains(t, string(data), "VLAN", "file should be overwritten with CSV data")
+	assert.Contains(t, string(data), "<opnsense>", "file must be overwritten with generated XML")
 }
 
 func TestGenerateXMLWithFirewallRules(t *testing.T) {
 	tmpDir := t.TempDir()
 	outPath := filepath.Join(tmpDir, "fw.xml")
-	baseCfgPath := baseConfigPath(t)
 
 	cmd := newTestRootCmd()
-	_, err := executeCommand(cmd,
-		"generate", "--format", "xml",
-		"--count", "3",
-		"--base-config", baseCfgPath,
+	_, err := executeCommand(cmd, "generate",
+		"--vlan-count", "3",
 		"--seed", "42",
-		"--include-firewall-rules",
+		"--firewall-rules",
 		"--output", outPath,
 	)
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(outPath)
 	require.NoError(t, err)
-	assert.Contains(t, string(data), "<opnsense>")
+	content := string(data)
+	assert.Contains(t, content, "<rule>")
 }
 
-func TestGenerateXMLRejectsNatMappings(t *testing.T) {
-	baseCfgPath := baseConfigPath(t)
+func TestGenerateInvalidVlanCount(t *testing.T) {
+	cmd := newTestRootCmd()
+	_, err := executeCommand(cmd, "generate", "--vlan-count", "-1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--vlan-count")
+}
+
+func TestGenerateVlanCountZero(t *testing.T) {
+	tmpDir := t.TempDir()
+	outPath := filepath.Join(tmpDir, "zero.xml")
 
 	cmd := newTestRootCmd()
-	_, err := executeCommand(cmd,
-		"generate", "--format", "xml",
-		"--count", "3",
-		"--base-config", baseCfgPath,
-		"--nat-mappings", "5",
+	_, err := executeCommand(cmd, "generate",
+		"--vlan-count", "0",
+		"--seed", "1",
+		"--output", outPath,
+	)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "<opnsense>")
+	// No <vlan> children in the <vlans> section.
+	assert.NotContains(t, content, "<vlan>")
+}
+
+func TestGenerateVlanCountOne(t *testing.T) {
+	tmpDir := t.TempDir()
+	outPath := filepath.Join(tmpDir, "one.xml")
+
+	cmd := newTestRootCmd()
+	_, err := executeCommand(cmd, "generate",
+		"--vlan-count", "1",
+		"--seed", "1",
+		"--output", outPath,
+	)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(string(data), "<vlan>"))
+}
+
+func TestGenerateVlanCountExceedsMax(t *testing.T) {
+	cmd := newTestRootCmd()
+	_, err := executeCommand(cmd, "generate", "--vlan-count", "4094")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--vlan-count")
+	assert.Contains(t, err.Error(), "4093")
+}
+
+func TestGenerateBaseConfigRejectedWithCSV(t *testing.T) {
+	tmpDir := t.TempDir()
+	basePath := filepath.Join(tmpDir, "base.xml")
+	require.NoError(t, os.WriteFile(basePath, []byte("<?xml version=\"1.0\"?><opnsense/>"), 0o600))
+
+	cmd := newTestRootCmd()
+	_, err := executeCommand(cmd, "generate",
+		"--format", "csv",
+		"--base-config", basePath,
 	)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not yet supported")
+	assert.Contains(t, err.Error(), "--base-config is only supported with --format xml")
 }
 
-func TestGenerateXMLRejectsVpnCount(t *testing.T) {
-	baseCfgPath := baseConfigPath(t)
+func TestGenerateBaseConfigMalformed(t *testing.T) {
+	tmpDir := t.TempDir()
+	badPath := filepath.Join(tmpDir, "bad.xml")
+	require.NoError(t, os.WriteFile(badPath, []byte("not <xml properly"), 0o600))
 
 	cmd := newTestRootCmd()
-	_, err := executeCommand(cmd,
-		"generate", "--format", "xml",
-		"--count", "3",
-		"--base-config", baseCfgPath,
-		"--vpn-count", "2",
+	_, err := executeCommand(cmd, "generate", "--base-config", badPath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "load base config")
+}
+
+func TestGenerateOverlayReplacesFilterWholesale(t *testing.T) {
+	// When --base-config is supplied and --firewall-rules is NOT set, the
+	// overlay replaces the base's <filter> section with an empty one from
+	// the device. Pin this behavior so a future shift to merge-semantics
+	// is a deliberate, test-visible change.
+	tmpDir := t.TempDir()
+	basePath := filepath.Join(tmpDir, "base.xml")
+	base := `<?xml version="1.0"?>
+<opnsense>
+  <version>1.0</version>
+  <system><hostname>base</hostname><domain>base.test</domain></system>
+  <filter>
+    <rule>
+      <type>block</type>
+      <descr>from base — must be dropped on wholesale overlay</descr>
+    </rule>
+  </filter>
+</opnsense>`
+	require.NoError(t, os.WriteFile(basePath, []byte(base), 0o600))
+
+	outPath := filepath.Join(tmpDir, "overlay.xml")
+	cmd := newTestRootCmd()
+	_, err := executeCommand(cmd, "generate",
+		"--base-config", basePath,
+		"--seed", "1",
+		"--output", outPath,
 	)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not yet supported")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.NotContains(t, content, "must be dropped on wholesale overlay",
+		"base Filter.Rule must be replaced wholesale when overlaying without --firewall-rules")
 }
 
-func TestGenerateInvalidCount(t *testing.T) {
+func TestGenerateHostnameAndDomainOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+	outPath := filepath.Join(tmpDir, "named.xml")
+
 	cmd := newTestRootCmd()
-	_, err := executeCommand(cmd, "generate", "--format", "csv", "--count", "0")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--count must be between")
+	_, err := executeCommand(cmd, "generate",
+		"--seed", "42",
+		"--hostname", "mygateway",
+		"--domain", "example.test",
+		"--output", outPath,
+	)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "<hostname>mygateway</hostname>")
+	assert.Contains(t, content, "<domain>example.test</domain>")
 }
 
 // --- Validate Command Tests ---

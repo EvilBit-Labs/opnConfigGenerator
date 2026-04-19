@@ -1,24 +1,33 @@
-// Package opnsensegen handles loading, injecting, and marshaling OPNsense XML configurations.
+// Package opnsensegen is the transport layer for OPNsense XML documents.
+// It exposes only load / parse / marshal; all generation and serialization
+// logic lives in internal/faker and internal/serializer/opnsense respectively.
 //
 // It uses the opnDossier schema types (github.com/EvilBit-Labs/opnDossier/pkg/schema/opnsense)
 // as the canonical OPNsense data model, ensuring consistency across the opnDossier ecosystem.
 package opnsensegen
 
 import (
+	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"os"
-	"strconv"
-	"strings"
+	"sort"
 
-	"github.com/EvilBit-Labs/opnConfigGenerator/internal/generator"
-	"github.com/EvilBit-Labs/opnConfigGenerator/internal/netutil"
 	"github.com/EvilBit-Labs/opnDossier/pkg/schema/opnsense"
+	"github.com/charmbracelet/log"
 )
 
-// defaultParentInterface is the default physical NIC for VLAN tagging.
-const defaultParentInterface = "igb0"
+// mapBackedSections names the OPNsense XML elements whose children are
+// serialized from a Go map and therefore emit in non-deterministic order.
+// MarshalConfig post-processes these sections to sort children by tag name,
+// which is the cheapest way to guarantee byte-stable output without forking
+// opnDossier's MarshalXML implementations.
+var mapBackedSections = map[string]bool{
+	"interfaces": true,
+	"dhcpd":      true,
+}
 
 // LoadBaseConfig reads and parses a base OPNsense config.xml file.
 func LoadBaseConfig(path string) (*opnsense.OpnSenseDocument, error) {
@@ -26,7 +35,6 @@ func LoadBaseConfig(path string) (*opnsense.OpnSenseDocument, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read base config %q: %w", path, err)
 	}
-
 	return ParseConfig(data)
 }
 
@@ -36,134 +44,164 @@ func ParseConfig(data []byte) (*opnsense.OpnSenseDocument, error) {
 	if err := xml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config XML: %w", err)
 	}
-
 	return &cfg, nil
 }
 
-// InjectVlans adds generated VLAN data and corresponding interface entries into the config.
-func InjectVlans(cfg *opnsense.OpnSenseDocument, vlans []generator.VlanConfig, optCounter int) {
-	if cfg.Interfaces.Items == nil {
-		cfg.Interfaces.Items = make(map[string]opnsense.Interface)
-	}
-
-	for i, v := range vlans {
-		ifName := fmt.Sprintf("opt%d", optCounter+i)
-		vlanIfName := fmt.Sprintf("vlan0.%d", v.VlanID)
-
-		cfg.VLANs.VLAN = append(cfg.VLANs.VLAN, opnsense.VLAN{
-			If:     defaultParentInterface,
-			Tag:    strconv.FormatUint(uint64(v.VlanID), 10),
-			Descr:  v.Description,
-			Vlanif: vlanIfName,
-		})
-
-		gateway := netutil.GatewayIP(v.IPNetwork)
-		cfg.Interfaces.Items[ifName] = opnsense.Interface{
-			Enable: "1",
-			Descr:  v.Description,
-			If:     vlanIfName,
-			IPAddr: gateway.String(),
-			Subnet: strconv.Itoa(v.IPNetwork.Bits()),
-		}
-	}
-}
-
-// InjectDHCP adds generated DHCP configurations into the config.
-func InjectDHCP(
-	cfg *opnsense.OpnSenseDocument,
-	dhcpConfigs []generator.DhcpServerConfig,
-	optCounter int,
-) {
-	if cfg.Dhcpd.Items == nil {
-		cfg.Dhcpd.Items = make(map[string]opnsense.DhcpdInterface)
-	}
-
-	for i, dhcp := range dhcpConfigs {
-		ifName := fmt.Sprintf("opt%d", optCounter+i)
-
-		dhcpIface := opnsense.NewDhcpdInterface()
-		dhcpIface.Enable = "1"
-		dhcpIface.Range = opnsense.Range{
-			From: dhcp.RangeStart.String(),
-			To:   dhcp.RangeEnd.String(),
-		}
-		dhcpIface.Gateway = dhcp.Gateway.String()
-		dhcpIface.Dnsserver = strings.Join(dhcp.DNSServers, ",")
-
-		cfg.Dhcpd.Items[ifName] = dhcpIface
-	}
-}
-
-// InjectFirewallRules adds generated firewall rules into the config.
-func InjectFirewallRules(cfg *opnsense.OpnSenseDocument, rules []generator.FirewallRule) {
-	for _, r := range rules {
-		src := buildSource(r.Source)
-		dst := buildDestination(r.Destination, r.Ports)
-
-		var log opnsense.BoolFlag
-		if r.Log {
-			log = true
-		}
-
-		cfg.Filter.Rule = append(cfg.Filter.Rule, opnsense.Rule{
-			Type:        r.Action,
-			Descr:       r.Description,
-			Interface:   opnsense.InterfaceList{r.Interface},
-			IPProtocol:  "inet",
-			Protocol:    r.Protocol,
-			Source:      src,
-			Destination: dst,
-			Log:         log,
-			Direction:   r.Direction,
-			Tracker:     strconv.FormatUint(r.Tracker, 10),
-		})
-	}
-}
-
-// MarshalConfig writes the config to XML with proper formatting.
+// MarshalConfig writes the config to XML with a standard OPNsense header,
+// two-space indentation, and a trailing newline. Children of map-backed
+// sections (interfaces, dhcpd) are sorted alphabetically so output is
+// byte-stable under a fixed seed.
+//
+// The entire document is assembled in memory before the first Write to w so
+// that any encoding or stabilization error leaves the destination untouched
+// rather than emitting a truncated file.
 func MarshalConfig(cfg *opnsense.OpnSenseDocument, w io.Writer) error {
-	if _, err := io.WriteString(w, xml.Header); err != nil {
-		return fmt.Errorf("write XML header: %w", err)
-	}
-
-	enc := xml.NewEncoder(w)
+	var body bytes.Buffer
+	enc := xml.NewEncoder(&body)
 	enc.Indent("", "  ")
-
 	if err := enc.Encode(cfg); err != nil {
 		return fmt.Errorf("encode config XML: %w", err)
 	}
-
-	if _, err := io.WriteString(w, "\n"); err != nil {
-		return fmt.Errorf("write trailing newline: %w", err)
+	if err := enc.Flush(); err != nil {
+		return fmt.Errorf("flush XML encoder: %w", err)
 	}
 
+	stable, err := sortMapBackedSections(body.Bytes())
+	if err != nil {
+		return fmt.Errorf("stabilize XML: %w", err)
+	}
+
+	var out bytes.Buffer
+	out.Grow(len(xml.Header) + len(stable) + 1)
+	out.WriteString(xml.Header)
+	out.Write(stable)
+	out.WriteByte('\n')
+
+	if _, err := w.Write(out.Bytes()); err != nil {
+		return fmt.Errorf("write XML: %w", err)
+	}
 	return nil
 }
 
-// buildSource creates an opnsense.Source from a generator source string.
-func buildSource(source string) opnsense.Source {
-	if source == opnsense.NetworkAny {
-		empty := ""
-		return opnsense.Source{Any: &empty}
+// sortMapBackedSections walks the token stream and, whenever it encounters
+// a section in mapBackedSections, buffers its direct children, sorts them by
+// tag name, and re-emits them in sorted order. Non-section tokens pass
+// through untouched.
+func sortMapBackedSections(raw []byte) ([]byte, error) {
+	dec := xml.NewDecoder(bytes.NewReader(raw))
+	var out bytes.Buffer
+	enc := xml.NewEncoder(&out)
+	enc.Indent("", "  ")
+
+	for {
+		tok, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		start, isStart := tok.(xml.StartElement)
+		if !isStart || !mapBackedSections[start.Name.Local] {
+			if err := enc.EncodeToken(tok); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		if err := emitSortedChildren(dec, enc, start); err != nil {
+			return nil, err
+		}
 	}
 
-	return opnsense.Source{Network: source}
+	if err := enc.Flush(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
 }
 
-// buildDestination creates an opnsense.Destination from generator destination and port strings.
-func buildDestination(destination, ports string) opnsense.Destination {
-	dst := opnsense.Destination{}
-
-	if destination == opnsense.NetworkAny {
-		empty := ""
-		dst.Any = &empty
-	} else {
-		dst.Network = destination
+// emitSortedChildren buffers the direct children of a map-backed section,
+// sorts them by start-element name, and emits the section with sorted
+// children. It consumes tokens through the section's closing end element.
+func emitSortedChildren(dec *xml.Decoder, enc *xml.Encoder, start xml.StartElement) error {
+	type child struct {
+		name   string
+		tokens []xml.Token
 	}
+	var (
+		children []child
+		current  child
+		depth    int
+	)
 
-	if ports != opnsense.NetworkAny {
-		dst.Port = ports
+	for {
+		t, err := dec.Token()
+		if err != nil {
+			return err
+		}
+
+		switch tt := t.(type) {
+		case xml.StartElement:
+			if depth == 0 {
+				current = child{name: tt.Name.Local}
+			}
+			current.tokens = append(current.tokens, xml.CopyToken(t))
+			depth++
+
+		case xml.EndElement:
+			if depth == 0 {
+				// End of the map-backed section itself.
+				sort.SliceStable(children, func(i, j int) bool {
+					return children[i].name < children[j].name
+				})
+				if err := enc.EncodeToken(start); err != nil {
+					return err
+				}
+				for _, c := range children {
+					for _, ct := range c.tokens {
+						if err := enc.EncodeToken(ct); err != nil {
+							return err
+						}
+					}
+				}
+				return enc.EncodeToken(tt)
+			}
+			depth--
+			current.tokens = append(current.tokens, xml.CopyToken(t))
+			if depth == 0 {
+				children = append(children, current)
+				current = child{}
+			}
+
+		default:
+			if depth > 0 {
+				current.tokens = append(current.tokens, xml.CopyToken(t))
+				continue
+			}
+			// At depth 0 (between children) we silently drop indentation
+			// whitespace because the encoder re-indents on emit. A
+			// non-whitespace token here (user-authored comment, CDATA,
+			// processing instruction) is dropped with a warning so
+			// operators can see annotations were lost from their base
+			// config — the sort post-processor cannot place inter-child
+			// tokens back in a stable position after reordering.
+			switch tok := t.(type) {
+			case xml.CharData:
+				if len(bytes.TrimSpace(tok)) > 0 {
+					log.Warn("dropping non-whitespace chardata in map-backed section",
+						"section", start.Name.Local)
+				}
+			case xml.Comment:
+				log.Warn("dropping XML comment in map-backed section (sort post-processor does not preserve comments)",
+					"section", start.Name.Local)
+			case xml.ProcInst:
+				log.Warn("dropping XML processing instruction in map-backed section",
+					"section", start.Name.Local, "target", tok.Target)
+			case xml.Directive:
+				log.Warn("dropping XML directive in map-backed section",
+					"section", start.Name.Local)
+			}
+		}
 	}
-
-	return dst
 }

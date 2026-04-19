@@ -1,8 +1,8 @@
 // Tests in this file verify that opnConfigGenerator can act as an external
-// consumer of opnDossier's public pkg/ API surface. Specifically, they exercise
-// the file->CommonDevice pipeline described in NATS-146:
+// consumer of opnDossier's public pkg/ API surface. They exercise the full
+// reverse-serializer pipeline:
 //
-//	generate -> marshal XML -> parse XML -> ConvertDocument -> CommonDevice
+//	faker.NewCommonDevice -> serializer.Serialize -> MarshalConfig -> ParseConfig -> ConvertDocument
 //
 // These tests intentionally use github.com/EvilBit-Labs/opnDossier/pkg/model
 // and github.com/EvilBit-Labs/opnDossier/pkg/parser/opnsense so that a build
@@ -11,83 +11,63 @@ package opnsensegen_test
 
 import (
 	"bytes"
-	"math/rand/v2"
-	"net/netip"
 	"testing"
 
-	"github.com/EvilBit-Labs/opnConfigGenerator/internal/generator"
+	"github.com/EvilBit-Labs/opnConfigGenerator/internal/faker"
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/opnsensegen"
+	serializer "github.com/EvilBit-Labs/opnConfigGenerator/internal/serializer/opnsense"
 	"github.com/EvilBit-Labs/opnDossier/pkg/model"
 	opnsenseparser "github.com/EvilBit-Labs/opnDossier/pkg/parser/opnsense"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestCommonDeviceRoundTrip exercises the full consumer pipeline against a
-// realistic generated config: generate -> marshal XML -> parse XML -> convert.
-// This is the primary acceptance test for NATS-146 acceptance criteria #1, #2,
-// and #8 on the opnConfigGenerator side.
-func TestCommonDeviceRoundTrip(t *testing.T) {
+// TestCommonDeviceRoundTripViaSerializer exercises the full reverse pipeline
+// against a faker-generated device and asserts round-trip parity on the
+// fields Phase 1 covers. Zero ConversionWarnings is the primary gate.
+func TestCommonDeviceRoundTripViaSerializer(t *testing.T) {
 	t.Parallel()
 
-	const (
-		testHostname = "nats146-host"
-		testDomain   = "test.local"
+	original, err := faker.NewCommonDevice(
+		faker.WithSeed(146),
+		faker.WithVLANCount(2),
+		// Phase 1 includes filter serialization — exercise it end-to-end.
+		faker.WithFirewallRules(true),
+		faker.WithDeviceType(model.DeviceTypeOPNsense),
 	)
-
-	cfg, err := opnsensegen.LoadBaseConfig("../../testdata/base-config.xml")
 	require.NoError(t, err)
-	cfg.System.Hostname = testHostname
-	cfg.System.Domain = testDomain
+	require.NotEmpty(t, original.FirewallRules, "test precondition: faker must emit firewall rules")
 
-	vlans := []generator.VlanConfig{
-		{
-			VlanID:        42,
-			IPNetwork:     netip.MustParsePrefix("10.42.7.0/24"),
-			Description:   "IT VLAN 42",
-			WanAssignment: 1,
-			Department:    generator.DeptIT,
-		},
-		{
-			VlanID:        100,
-			IPNetwork:     netip.MustParsePrefix("10.100.0.0/24"),
-			Description:   "Sales VLAN 100",
-			WanAssignment: 2,
-			Department:    generator.DeptSales,
-		},
-	}
-	opnsensegen.InjectVlans(cfg, vlans, 6)
+	doc, err := serializer.Serialize(original)
+	require.NoError(t, err)
 
-	//nolint:gosec // Deterministic fake data generation, not security-sensitive
-	rng := rand.New(rand.NewPCG(42, 0))
-	dhcpConfigs := []generator.DhcpServerConfig{
-		generator.DeriveDHCPConfig(vlans[0], rng),
-	}
-	opnsensegen.InjectDHCP(cfg, dhcpConfigs, 6)
-
-	// Round-trip through XML bytes to prove the consumer pipeline works against
-	// on-disk representation, not just in-memory struct passing.
 	var buf bytes.Buffer
-	require.NoError(t, opnsensegen.MarshalConfig(cfg, &buf))
+	require.NoError(t, opnsensegen.MarshalConfig(doc, &buf))
 
 	parsed, err := opnsensegen.ParseConfig(buf.Bytes())
 	require.NoError(t, err)
 
 	device, warnings, err := opnsenseparser.ConvertDocument(parsed)
-	require.NoError(t, err, "ConvertDocument must accept a generator-produced document")
-	require.NotNil(t, device, "ConvertDocument must return a non-nil CommonDevice")
+	require.NoError(t, err, "ConvertDocument must accept a serializer-produced document")
+	require.NotNil(t, device)
 
-	// Zero warnings expected for output we ship. If warnings appear, surface
-	// them in the failure so future regressions are diagnosable.
-	assert.Empty(t, warnings,
-		"generator output produced %d ConversionWarning(s): %+v", len(warnings), warnings)
+	assert.Emptyf(t, warnings,
+		"serializer output produced %d ConversionWarning(s): %+v", len(warnings), warnings)
 
-	assert.Equal(t, model.DeviceTypeOPNsense, device.DeviceType,
-		"DeviceType must be OPNsense for opnsense converter output")
-	assert.Equal(t, testHostname, device.System.Hostname)
-	assert.Equal(t, testDomain, device.System.Domain)
-	assert.Len(t, device.VLANs, 2, "both injected VLANs must be present in CommonDevice")
-	assert.NotEmpty(t, device.Interfaces, "injected VLAN interfaces must surface in CommonDevice")
+	assert.Equal(t, model.DeviceTypeOPNsense, device.DeviceType)
+	assert.Equal(t, original.System.Hostname, device.System.Hostname)
+	assert.Equal(t, original.System.Domain, device.System.Domain)
+	assert.Equal(t, original.System.Timezone, device.System.Timezone)
+	assert.Equal(t, original.System.Language, device.System.Language)
+	assert.Len(t, device.VLANs, 2)
+	// Spot-check VLAN tag identity (not just count).
+	origTags := map[string]bool{original.VLANs[0].Tag: true, original.VLANs[1].Tag: true}
+	for _, v := range device.VLANs {
+		assert.Truef(t, origTags[v.Tag], "round-trip produced unexpected VLAN tag %q", v.Tag)
+	}
+	assert.NotEmpty(t, device.Interfaces)
+	assert.Len(t, device.FirewallRules, len(original.FirewallRules),
+		"at least one firewall rule must survive the round-trip")
 }
 
 // TestCommonDeviceMinimalConfig verifies ConvertDocument accepts the sparse
@@ -103,7 +83,7 @@ func TestCommonDeviceMinimalConfig(t *testing.T) {
 	device, warnings, err := opnsenseparser.ConvertDocument(cfg)
 	require.NoError(t, err)
 	require.NotNil(t, device)
-	assert.Empty(t, warnings,
+	assert.Emptyf(t, warnings,
 		"minimal config produced %d ConversionWarning(s): %+v", len(warnings), warnings)
 
 	assert.Equal(t, model.DeviceTypeOPNsense, device.DeviceType)
@@ -111,8 +91,8 @@ func TestCommonDeviceMinimalConfig(t *testing.T) {
 }
 
 // TestCommonDeviceNilDocument pins the consumer-visible error contract for
-// ConvertDocument. Guards against a silent change where nil input starts
-// returning a different error or panicking.
+// ConvertDocument against nil input. Guards against a silent change where
+// nil input starts returning a different error or panicking.
 func TestCommonDeviceNilDocument(t *testing.T) {
 	t.Parallel()
 

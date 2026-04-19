@@ -17,28 +17,11 @@ var (
 var validateCmd = &cobra.Command{
 	Use:   "validate",
 	Short: "Validate OPNsense configuration files",
-	Long: `Validate OPNsense configuration files for correctness and compliance.
+	Long: `Validate OPNsense configuration files.
 
-This command validates OPNsense configuration files against the OPNsense schema
-and checks for common configuration errors, conflicts, and best practices.
-
-The validator can detect:
-  • XML schema violations
-  • Network configuration conflicts (IP overlaps, VLAN conflicts)
-  • Invalid interface assignments
-  • Malformed firewall rules
-  • Missing required dependencies
-  • Security misconfigurations
-
-Examples:
-  # Validate an OPNsense config.xml file
-  opnConfigGenerator validate --input config.xml
-
-  # Validate with format auto-detection
-  opnConfigGenerator validate --input network-config.xml --format xml
-
-  # Limit error reporting
-  opnConfigGenerator validate --input config.xml --max-errors 5`,
+Not yet implemented — this subcommand is reserved for a future phase and
+currently returns an error. Flags are defined only so they are stable when
+implementation lands.`,
 	RunE: func(_ *cobra.Command, _ []string) error {
 		return errors.New("validate command not yet implemented")
 	},
