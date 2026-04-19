@@ -21,11 +21,12 @@ import (
 func TestRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	original := faker.NewCommonDevice(
+	original, err := faker.NewCommonDevice(
 		faker.WithSeed(2026),
 		faker.WithVLANCount(3),
 		faker.WithFirewallRules(true),
 	)
+	require.NoError(t, err)
 
 	doc, err := serializer.Serialize(original)
 	require.NoError(t, err)
@@ -88,7 +89,20 @@ func TestRoundTrip(t *testing.T) {
 		assert.Equalf(t, want.DNSServer, got.DNSServer, "DHCP %q DNSServer", iface)
 	}
 
-	assert.Len(t, roundTripped.FirewallRules, len(original.FirewallRules))
+	// Firewall rule per-field parity. Faker emits rules keyed to an
+	// interface name, so we compare by Interfaces[0] + Type to find pairs.
+	require.Len(t, roundTripped.FirewallRules, len(original.FirewallRules))
+	origRules := firewallRulesByInterface(original.FirewallRules)
+	rtRules := firewallRulesByInterface(roundTripped.FirewallRules)
+	for iface, want := range origRules {
+		got, ok := rtRules[iface]
+		require.Truef(t, ok, "firewall rule for interface %q missing on round-trip", iface)
+		assert.Equalf(t, want.Type, got.Type, "rule %q Type", iface)
+		assert.Equalf(t, want.Description, got.Description, "rule %q Description", iface)
+		assert.Equalf(t, want.IPProtocol, got.IPProtocol, "rule %q IPProtocol", iface)
+		assert.Equalf(t, want.Source.Address, got.Source.Address, "rule %q Source.Address", iface)
+		assert.Equalf(t, want.Destination.Address, got.Destination.Address, "rule %q Destination.Address", iface)
+	}
 }
 
 // TestRoundTripByteStable asserts MarshalConfig output is byte-identical
@@ -98,11 +112,12 @@ func TestRoundTrip(t *testing.T) {
 func TestRoundTripByteStable(t *testing.T) {
 	t.Parallel()
 
-	device := faker.NewCommonDevice(
+	device, err := faker.NewCommonDevice(
 		faker.WithSeed(99),
 		faker.WithVLANCount(4),
 		faker.WithFirewallRules(true),
 	)
+	require.NoError(t, err)
 	doc, err := serializer.Serialize(device)
 	require.NoError(t, err)
 
@@ -143,6 +158,17 @@ func dhcpByInterface(xs []model.DHCPScope) map[string]model.DHCPScope {
 	m := make(map[string]model.DHCPScope, len(xs))
 	for _, x := range xs {
 		m[x.Interface] = x
+	}
+	return m
+}
+
+func firewallRulesByInterface(xs []model.FirewallRule) map[string]model.FirewallRule {
+	m := make(map[string]model.FirewallRule, len(xs))
+	for _, x := range xs {
+		if len(x.Interfaces) == 0 {
+			continue
+		}
+		m[x.Interfaces[0]] = x
 	}
 	return m
 }

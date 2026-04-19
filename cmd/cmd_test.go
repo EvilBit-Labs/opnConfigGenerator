@@ -317,6 +317,98 @@ func TestGenerateInvalidVlanCount(t *testing.T) {
 	assert.Contains(t, err.Error(), "--vlan-count")
 }
 
+func TestGenerateVlanCountZero(t *testing.T) {
+	tmpDir := t.TempDir()
+	outPath := filepath.Join(tmpDir, "zero.xml")
+
+	cmd := newTestRootCmd()
+	_, err := executeCommand(cmd, "generate",
+		"--vlan-count", "0",
+		"--seed", "1",
+		"--output", outPath,
+	)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "<opnsense>")
+	// No <vlan> children in the <vlans> section.
+	assert.NotContains(t, content, "<vlan>")
+}
+
+func TestGenerateVlanCountOne(t *testing.T) {
+	tmpDir := t.TempDir()
+	outPath := filepath.Join(tmpDir, "one.xml")
+
+	cmd := newTestRootCmd()
+	_, err := executeCommand(cmd, "generate",
+		"--vlan-count", "1",
+		"--seed", "1",
+		"--output", outPath,
+	)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(string(data), "<vlan>"))
+}
+
+func TestGenerateVlanCountExceedsMax(t *testing.T) {
+	cmd := newTestRootCmd()
+	_, err := executeCommand(cmd, "generate", "--vlan-count", "4093")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--vlan-count")
+	assert.Contains(t, err.Error(), "4092")
+}
+
+func TestGenerateBaseConfigMalformed(t *testing.T) {
+	tmpDir := t.TempDir()
+	badPath := filepath.Join(tmpDir, "bad.xml")
+	require.NoError(t, os.WriteFile(badPath, []byte("not <xml properly"), 0o600))
+
+	cmd := newTestRootCmd()
+	_, err := executeCommand(cmd, "generate", "--base-config", badPath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "load base config")
+}
+
+func TestGenerateOverlayReplacesFilterWholesale(t *testing.T) {
+	// When --base-config is supplied and --firewall-rules is NOT set, the
+	// overlay replaces the base's <filter> section with an empty one from
+	// the device. Pin this behavior so a future shift to merge-semantics
+	// is a deliberate, test-visible change.
+	tmpDir := t.TempDir()
+	basePath := filepath.Join(tmpDir, "base.xml")
+	base := `<?xml version="1.0"?>
+<opnsense>
+  <version>1.0</version>
+  <system><hostname>base</hostname><domain>base.test</domain></system>
+  <filter>
+    <rule>
+      <type>block</type>
+      <descr>from base — must be dropped on wholesale overlay</descr>
+    </rule>
+  </filter>
+</opnsense>`
+	require.NoError(t, os.WriteFile(basePath, []byte(base), 0o600))
+
+	outPath := filepath.Join(tmpDir, "overlay.xml")
+	cmd := newTestRootCmd()
+	_, err := executeCommand(cmd, "generate",
+		"--base-config", basePath,
+		"--seed", "1",
+		"--output", outPath,
+	)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.NotContains(t, content, "must be dropped on wholesale overlay",
+		"base Filter.Rule must be replaced wholesale when overlaying without --firewall-rules")
+}
+
 func TestGenerateHostnameAndDomainOverride(t *testing.T) {
 	tmpDir := t.TempDir()
 	outPath := filepath.Join(tmpDir, "named.xml")

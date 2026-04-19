@@ -10,8 +10,7 @@ import (
 )
 
 // newRand builds a *rand.Rand and a *gofakeit.Faker sharing the same stream.
-// A seed of 0 is the sentinel for "non-deterministic": a fresh random stream
-// per call. Any non-zero seed produces a deterministic stream.
+// See WithSeed for the seed == 0 sentinel semantics.
 func newRand(seed int64) (*rand.Rand, *gofakeit.Faker) {
 	var rng *rand.Rand
 	if seed == 0 {

@@ -5,9 +5,11 @@ import (
 )
 
 // fakeFirewallRules emits a minimal default ruleset: one pass rule per
-// non-WAN interface, sourcing from that interface's network to "any". This
-// matches OPNsense's out-of-the-box LAN default and is the smallest ruleset
-// that produces a semantically useful config.xml.
+// non-WAN interface, sourcing from that interface's network (OPNsense
+// resolves a bare interface name like "lan" into the alias for the network
+// behind that interface) to "any". This matches OPNsense's out-of-the-box
+// LAN default and is the smallest ruleset that produces a semantically
+// useful config.xml.
 func fakeFirewallRules(interfaces []model.Interface) []model.FirewallRule {
 	rules := make([]model.FirewallRule, 0, len(interfaces))
 	for _, iface := range interfaces {

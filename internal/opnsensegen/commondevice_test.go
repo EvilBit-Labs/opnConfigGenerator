@@ -28,10 +28,11 @@ import (
 func TestCommonDeviceRoundTripViaSerializer(t *testing.T) {
 	t.Parallel()
 
-	original := faker.NewCommonDevice(
+	original, err := faker.NewCommonDevice(
 		faker.WithSeed(146),
 		faker.WithVLANCount(2),
 	)
+	require.NoError(t, err)
 
 	doc, err := serializer.Serialize(original)
 	require.NoError(t, err)

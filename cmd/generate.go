@@ -83,13 +83,16 @@ func runGenerate(_ *cobra.Command, _ []string) (err error) {
 		return fmt.Errorf("--vlan-count must be between 0 and %d, got %d", maxVlanCount, vlanCount)
 	}
 
-	device := faker.NewCommonDevice(
+	device, err := faker.NewCommonDevice(
 		faker.WithSeed(seed),
 		faker.WithVLANCount(vlanCount),
 		faker.WithFirewallRules(includeFirewall),
 		faker.WithHostname(hostnameOverride),
 		faker.WithDomain(domainOverride),
 	)
+	if err != nil {
+		return fmt.Errorf("generate device: %w", err)
+	}
 
 	w, needClose, err := getOutputWriter()
 	if err != nil {

@@ -15,7 +15,8 @@ import (
 func TestWriteVlanCSVFromCommonDevice(t *testing.T) {
 	t.Parallel()
 
-	dev := faker.NewCommonDevice(faker.WithSeed(7), faker.WithVLANCount(2))
+	dev, err := faker.NewCommonDevice(faker.WithSeed(7), faker.WithVLANCount(2))
+	require.NoError(t, err)
 
 	var buf bytes.Buffer
 	require.NoError(t, csvio.WriteVlanCSV(&buf, dev))

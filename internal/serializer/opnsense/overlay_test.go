@@ -17,14 +17,28 @@ func TestOverlayPreservesBaseConfigUnrelatedFields(t *testing.T) {
 		Version: "1.2.3",
 		Theme:   "opnsense",
 		System:  opnschema.System{Hostname: "base-host", Domain: "base.test"},
+		Sysctl: []opnschema.SysctlItem{
+			{Tunable: "net.inet.ip.forwarding", Value: "1", Descr: "route"},
+		},
+		CAs: []opnschema.CertificateAuthority{
+			{Refid: "ca-1", Descr: "internal root"},
+		},
 	}
-	device := faker.NewCommonDevice(faker.WithSeed(1), faker.WithVLANCount(2))
+	device, err := faker.NewCommonDevice(faker.WithSeed(1), faker.WithVLANCount(2))
+	require.NoError(t, err)
 
 	merged, err := serializer.Overlay(base, device)
 	require.NoError(t, err)
 
+	// Fields outside Phase 1 scope must survive wholesale.
 	assert.Equal(t, "opnsense", merged.Theme, "Theme must survive overlay")
 	assert.Equal(t, "1.2.3", merged.Version, "Version must survive overlay")
+	require.Len(t, merged.Sysctl, 1, "Sysctl must survive overlay")
+	assert.Equal(t, "net.inet.ip.forwarding", merged.Sysctl[0].Tunable)
+	require.Len(t, merged.CAs, 1, "CAs must survive overlay")
+	assert.Equal(t, "ca-1", merged.CAs[0].Refid)
+
+	// Phase 1 subsystems come from the device.
 	assert.Equal(t, device.System.Hostname, merged.System.Hostname, "System replaced from device")
 	assert.Len(t, merged.VLANs.VLAN, 2)
 }
@@ -32,7 +46,9 @@ func TestOverlayPreservesBaseConfigUnrelatedFields(t *testing.T) {
 func TestOverlayNilBase(t *testing.T) {
 	t.Parallel()
 
-	_, err := serializer.Overlay(nil, faker.NewCommonDevice(faker.WithSeed(1)))
+	dev, err := faker.NewCommonDevice(faker.WithSeed(1))
+	require.NoError(t, err)
+	_, err = serializer.Overlay(nil, dev)
 	require.ErrorIs(t, err, serializer.ErrNilBase)
 }
 

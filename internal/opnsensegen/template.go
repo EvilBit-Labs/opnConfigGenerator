@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/EvilBit-Labs/opnDossier/pkg/schema/opnsense"
+	"github.com/charmbracelet/log"
 )
 
 // mapBackedSections names the OPNsense XML elements whose children are
@@ -176,10 +177,29 @@ func emitSortedChildren(dec *xml.Decoder, enc *xml.Encoder, start xml.StartEleme
 		default:
 			if depth > 0 {
 				current.tokens = append(current.tokens, xml.CopyToken(t))
+				continue
 			}
-			// CharData/Comment/Directive/ProcInst at depth 0 (between
-			// children) is indentation whitespace — drop it; the encoder
-			// re-indents on emit.
+			// At depth 0 (between children) we silently drop indentation
+			// whitespace because the encoder re-indents on emit. A
+			// non-whitespace token here (user-authored comment, CDATA,
+			// processing instruction) is preserved-but-warned so operators
+			// can see annotations were dropped from their base config.
+			switch tok := t.(type) {
+			case xml.CharData:
+				if len(bytes.TrimSpace(tok)) > 0 {
+					log.Warn("dropping non-whitespace chardata in map-backed section",
+						"section", start.Name.Local)
+				}
+			case xml.Comment:
+				log.Warn("dropping XML comment in map-backed section (sort post-processor does not preserve comments)",
+					"section", start.Name.Local)
+			case xml.ProcInst:
+				log.Warn("dropping XML processing instruction in map-backed section",
+					"section", start.Name.Local, "target", tok.Target)
+			case xml.Directive:
+				log.Warn("dropping XML directive in map-backed section",
+					"section", start.Name.Local)
+			}
 		}
 	}
 }

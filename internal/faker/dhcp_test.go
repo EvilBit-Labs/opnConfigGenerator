@@ -18,7 +18,8 @@ func TestFakeDHCPScopesOnePerStaticInterface(t *testing.T) {
 		{Name: "opt1", Type: "static", IPAddress: "10.0.0.1", Subnet: "24", Virtual: true},
 	}
 
-	scopes := fakeDHCPScopes(interfaces)
+	scopes, err := fakeDHCPScopes(interfaces)
+	require.NoError(t, err)
 
 	require.Len(t, scopes, 2, "WAN excluded; LAN + opt1 each produce one scope")
 	names := []string{scopes[0].Interface, scopes[1].Interface}
@@ -40,10 +41,22 @@ func TestFakeDHCPScopesOnePerStaticInterface(t *testing.T) {
 func TestFakeDHCPScopesSkipsWhenFieldsMissing(t *testing.T) {
 	t.Parallel()
 
-	scopes := fakeDHCPScopes([]model.Interface{
+	scopes, err := fakeDHCPScopes([]model.Interface{
 		{Name: "lan", Type: "static", IPAddress: "", Subnet: "24"},
 		{Name: "opt1", Type: "static", IPAddress: "10.0.0.1", Subnet: ""},
 		{Name: "opt2", Type: "none"},
 	})
+	require.NoError(t, err)
 	assert.Empty(t, scopes, "interfaces with missing fields produce no scope")
+}
+
+func TestFakeDHCPScopesErrorOnUnparseablePrefix(t *testing.T) {
+	t.Parallel()
+
+	_, err := fakeDHCPScopes([]model.Interface{
+		{Name: "bad", Type: "static", IPAddress: "not-an-ip", Subnet: "24"},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unparseable prefix")
+	assert.Contains(t, err.Error(), "bad")
 }
