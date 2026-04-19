@@ -5,7 +5,7 @@ category: best-practices
 module: internal/opnsensegen
 problem_type: best_practice
 component: tooling
-severity: medium
+severity: critical
 related_components:
   - testing_framework
   - documentation
@@ -41,10 +41,10 @@ The boundary is deliberate: *"Anything that operates on CommonDevice should stay
 
 Both paths are valid public APIs — choose based on what you already have:
 
-| Entrypoint                                                          | Use when                                                                                                       | Requires                                                                                                                                                                                                        |
-| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pkg/parser.Factory.CreateDevice(ctx, r, override, validate)`       | You have XML bytes or a `Reader` and want auto-detection of the device type                                    | Consumer-supplied `parser.XMLDecoder` implementation (opnDossier keeps its concrete decoder in `internal/cfgparser`); blank import of `pkg/parser/opnsense` and/or `pkg/parser/pfsense` for parser registration |
-| `pkg/parser/opnsense.ConvertDocument(doc *schema.OpnSenseDocument)` | You already have a parsed `*schema/opnsense.OpnSenseDocument` (via `encoding/xml` or your own schema pipeline) | Nothing — direct function call                                                                                                                                                                                  |
+| Entrypoint                                                                  | Use when                                                                                                       | Requires                                                                                                                                                                                                        |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pkg/parser.Factory.CreateDevice(ctx, r, deviceTypeOverride, validateMode)` | You have XML bytes or a `Reader` and want auto-detection of the device type                                    | Consumer-supplied `parser.XMLDecoder` implementation (opnDossier keeps its concrete decoder in `internal/cfgparser`); blank import of `pkg/parser/opnsense` and/or `pkg/parser/pfsense` for parser registration |
+| `pkg/parser/opnsense.ConvertDocument(doc *schema.OpnSenseDocument)`         | You already have a parsed `*schema/opnsense.OpnSenseDocument` (via `encoding/xml` or your own schema pipeline) | Nothing — direct function call                                                                                                                                                                                  |
 
 opnConfigGenerator chose `ConvertDocument` because it already parses XML through its own `opnsensegen.ParseConfig` (thin `encoding/xml` wrapper). Writing an `XMLDecoder` adapter for `Factory` would add code without new coverage.
 
@@ -78,7 +78,7 @@ A consumer-facing test that marshals to XML and re-parses proves the pipeline wo
 
 ### 6. CRITICAL: redact before exporting a CommonDevice
 
-**`pkg/model/CommonDevice` contains credential fields that opnDossier's public surface does NOT redact automatically.** A consumer that marshals `CommonDevice` directly to JSON, YAML, or XML **will leak secrets.**
+**`pkg/model/CommonDevice` contains credential fields that opnDossier's public surface does NOT redact automatically.** A consumer who marshals `CommonDevice` directly to JSON, YAML, or XML **will leak secrets.**
 
 The redaction logic lives in `internal/sanitizer/` and `internal/converter/` on the opnDossier side and is not exported via `pkg/`. Public API consumers must implement their own redaction pass before writing a `CommonDevice` to disk, logs, or a network response.
 
@@ -93,7 +93,7 @@ Known secret-bearing fields in `pkg/model` as of opnDossier v1.4.0 (non-exhausti
 | `HighAvailability.Password`       | `pkg/model/ha.go`           | XMLRPC sync password     |
 | `Bindpw`, `ROCommunity`, etc.     | various                     | LDAP/SNMP credentials    |
 
-Until opnDossier exports public redaction helpers on `CommonDevice`, treat the unredacted struct as secret-bearing. Check the upstream `pkg/model/` source for any new `*Key`, `*Password`, `*Secret`, `PSK`, `Community` fields introduced since v1.4.0 before releasing a consumer that serializes the struct.
+Until opnDossier exports public redaction helpers on `CommonDevice`, treat the unredacted struct as secret-bearing. Check the upstream `pkg/model/` source for any new `*Key`, `*Password`, `*Secret`, `PSK`, `Community` fields introduced since v1.4.0 before releasing a consumer who serializes the struct.
 
 ### 7. Handle `ConversionWarning`s explicitly
 
@@ -159,9 +159,14 @@ assert.Empty(t, warnings,
 
 ### Dependency-isolation regression test
 
-From `internal/opnsensegen/deps_isolation_test.go`:
+From `internal/opnsensegen/deps_isolation_test.go`. Two details matter:
+
+1. **`go list -deps -test`** — the opnDossier consumer imports live in `_test.go` files, so a plain `go list -deps <pkg>` excludes them. Without `-test`, the check silently passes even if `pkg/model` or `pkg/parser/opnsense` gained a CLI-only transitive dep — defeating the whole point.
+2. **Gate under `//go:build integration`** — the test shells out to the Go toolchain, so it belongs in `just test-integration` (which `just ci-check` runs) rather than the hot path of `just test`.
 
 ```go
+//go:build integration
+
 var cliOnlyPackages = []string{
     "github.com/charmbracelet/glamour",   // markdown rendering for `opnDossier render`
     "github.com/alecthomas/chroma",       // syntax highlighting, transitive of glamour
@@ -175,24 +180,43 @@ var cliOnlyPackages = []string{
 
 func TestConsumerDependencyIsolation(t *testing.T) {
     t.Parallel()
-    if testing.Short() {
-        t.Skip("skipping dep graph check in -short mode")
-    }
 
     ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
     defer cancel()
 
-    cmd := exec.CommandContext(ctx, "go", "list", "-deps", "-f", "{{.ImportPath}}",
+    cmd := exec.CommandContext(ctx, "go", "list", "-deps", "-test",
+        "-f", "{{.ImportPath}}",
         "github.com/EvilBit-Labs/opnConfigGenerator/internal/opnsensegen")
     output, err := cmd.CombinedOutput()
     if err != nil {
-        t.Skipf("cannot run `go list -deps` (infrastructure, not regression): %v", err)
+        // Only SKIP when the go toolchain is missing. Anything else
+        // (non-zero exit, context timeout, broken go.mod) is a real
+        // regression signal and must FAIL the test.
+        var pathErr *exec.Error
+        if errors.Is(err, exec.ErrNotFound) ||
+            (errors.As(err, &pathErr) && errors.Is(pathErr.Err, exec.ErrNotFound)) {
+            t.Skipf("go toolchain unavailable: %v", err)
+        }
+        if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+            t.Fatalf("go list -deps -test timed out after 30s: %v\n%s", err, output)
+        }
+        t.Fatalf("go list -deps -test failed: %v\n%s", err, output)
     }
 
-    leaked := findLeakedPackages(
-        strings.Split(strings.TrimSpace(string(output)), "\n"),
-        cliOnlyPackages,
-    )
+    trimmed := strings.TrimSpace(string(output))
+    require.NotEmpty(t, trimmed, "go list -deps -test returned no packages")
+    deps := strings.Split(trimmed, "\n")
+
+    // Sanity check: without this, a broken -test flag would yield a
+    // false pass because pkg/model/pkg/parser wouldn't be in the graph.
+    for _, want := range []string{
+        "github.com/EvilBit-Labs/opnDossier/pkg/model",
+        "github.com/EvilBit-Labs/opnDossier/pkg/parser/opnsense",
+    } {
+        require.Contains(t, deps, want, "expected %q in transitive deps", want)
+    }
+
+    leaked := findLeakedPackages(deps, cliOnlyPackages)
     require.Empty(t, leaked,
         "opnDossier CLI-only packages leaked into consumer transitive deps: %v\n"+
             "Run `go mod why -m <module>` to find the shortest path.", leaked)

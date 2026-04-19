@@ -72,7 +72,7 @@ ALWAYS write tests first, then implement code to make tests pass.
 
 ### Step 1: Write User Journeys
 
-```
+```text
 As a [role], I want to [action], so that [benefit]
 
 Example:
@@ -107,8 +107,11 @@ describe('Semantic Search', () => {
 ### Step 3: Run Tests (They Should Fail)
 
 ```bash
-npm test
-# Tests should fail - we haven't implemented yet
+# For this Go project — see project addendum at the top of this file.
+mise exec -- just test-race
+# Tests should fail — we haven't implemented yet.
+# (Upstream guidance used `npm test`; Go equivalent is go test, wrapped
+# by the just recipe so the race detector and CI timeout are applied.)
 ```
 
 This step is mandatory and is the RED gate for all production changes.
@@ -151,8 +154,9 @@ If the repository is under Git, stage the minimal fix now but defer the checkpoi
 ### Step 5: Run Tests Again
 
 ```bash
-npm test
-# Tests should now pass
+# For this Go project — use the project's just recipe.
+mise exec -- just test-race
+# Tests should now pass.
 ```
 
 Rerun the same relevant test target after the fix and confirm the previously failing test is now GREEN.
@@ -304,26 +308,24 @@ test('user can create a new market', async ({ page }) => {
 
 ## Test File Organization
 
+For this Go project, tests live alongside the code they cover in the same package (conventional Go layout):
+
+```text
+internal/
+├── opnsensegen/
+│   ├── template.go
+│   ├── template_test.go             # Unit tests, same package
+│   ├── commondevice_test.go         # External-consumer tests (_test pkg)
+│   └── deps_isolation_test.go       # //go:build integration
+├── generator/
+│   ├── vlan.go
+│   └── vlan_test.go
+└── ...
+testdata/
+└── base-config.xml                   # Fixtures for tests
 ```
-src/
-├── components/
-│   ├── Button/
-│   │   ├── Button.tsx
-│   │   ├── Button.test.tsx          # Unit tests
-│   │   └── Button.stories.tsx       # Storybook
-│   └── MarketCard/
-│       ├── MarketCard.tsx
-│       └── MarketCard.test.tsx
-├── app/
-│   └── api/
-│       └── markets/
-│           ├── route.ts
-│           └── route.test.ts         # Integration tests
-└── e2e/
-    ├── markets.spec.ts               # E2E tests
-    ├── trading.spec.ts
-    └── auth.spec.ts
-```
+
+Integration tests use the `//go:build integration` tag and are run via `mise exec -- just test-integration`. The upstream E2E/Playwright guidance in this skill does NOT apply — this project is a CLI with no UI to drive.
 
 ## Mocking External Services
 
@@ -473,7 +475,7 @@ npm test && npm run lint
 ## Best Practices
 
 01. **Write Tests First** - Always TDD
-02. **One Assert Per Test** - Focus on single behavior
+02. **Focus each test on one behavior** - In Go table-driven tests, each row is a distinct behavior; multiple assertions inside one `t.Run` subtest are fine when they all verify the same outcome. Assertions should be load-bearing (mutation-test them where feasible — see `internal/opnsensegen/deps_isolation_test.go` for a documented example). The "one assert per test" rule from upstream doesn't fit the Go convention here.
 03. **Descriptive Test Names** - Explain what's tested
 04. **Arrange-Act-Assert** - Clear test structure
 05. **Mock External Dependencies** - Isolate unit tests

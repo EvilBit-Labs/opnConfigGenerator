@@ -6,7 +6,19 @@ origin: ECC
 
 # Security Review Skill
 
-> **Project addendum (opnConfigGenerator):** This tool is currently offline with no network-facing surface, no web endpoints, no database, and no cloud infrastructure. If that changes, re-audit this skill's applicability. The relevant security surfaces today are: (1) generated config XML (no secrets should appear); (2) dependencies (see `just security-all` → gosec + govulncheck + secret scan); (3) consumer redaction of opnDossier `CommonDevice` before export — `Certificate.PrivateKey`, `CertificateAuthority.PrivateKey`, `WireGuardClient.PSK`, `APIKey.Secret`, `HighAvailability.Password`, `Bindpw`, `ROCommunity` are NOT redacted by opnDossier's public API. Read `SECURITY.md`, `.golangci.yml`, and `docs/solutions/best-practices/opndossier-pkg-consumer-integration-2026-04-18.md` before acting on anything below. Ignore sections about payments, OAuth, HTTP headers — they don't apply here.
+> **Project addendum (opnConfigGenerator) — READ THIS FIRST, THE UPSTREAM BODY MOSTLY DOES NOT APPLY:**
+>
+> This tool is currently offline with no network-facing surface, no web endpoints, no database, and no cloud infrastructure. If that changes, re-audit this skill's applicability.
+>
+> **Applicable surfaces today:**
+>
+> 1. Generated config XML — no real secrets should appear in generator output.
+> 2. Dependencies — run `mise exec -- just security-all` (gosec + govulncheck + secret scan). Exclusions live in `justfile` (gosec recipe) and `.golangci.yml` (`linters.settings.gosec`); don't add one without a `SECURITY.md` reference.
+> 3. Consumer redaction of opnDossier `CommonDevice` before export — `Certificate.PrivateKey`, `CertificateAuthority.PrivateKey`, `WireGuardClient.PSK`, `APIKey.Secret`, `HighAvailability.Password`, `Bindpw`, `ROCommunity` are NOT redacted by opnDossier's public API. See `docs/solutions/best-practices/opndossier-pkg-consumer-integration-2026-04-18.md`.
+>
+> **Not applicable (skip these upstream sections):** SQL injection/parameterized queries, XSS/DOMPurify, CSRF tokens, JWT/httpOnly cookies, Supabase Row Level Security, rate limiting, HTTPS enforcement, CORS, security headers, payments/wallet signatures, OAuth flows, and the generic pre-deployment checklist at the end of this file. None of that surface exists in this repo.
+>
+> **Canonical project references:** `SECURITY.md`, `.golangci.yml`, `CONTRIBUTING.md` — read those before acting on anything in the body below.
 
 This skill ensures all code follows security best practices and identifies potential vulnerabilities.
 
@@ -497,25 +509,21 @@ test('enforces rate limits', async () => {
 
 ## Pre-Deployment Security Checklist
 
-Before ANY production deployment:
+> The generic web/SaaS checklist upstream used to live here (HTTPS, CORS, CSRF, Row Level Security, wallet signatures, etc.) and was contradictory for this offline Go CLI. For this project, use the project-scoped list below.
 
-- [ ] **Secrets**: No hardcoded secrets, all in env vars
-- [ ] **Input Validation**: All user inputs validated
-- [ ] **SQL Injection**: All queries parameterized
-- [ ] **XSS**: User content sanitized
-- [ ] **CSRF**: Protection enabled
-- [ ] **Authentication**: Proper token handling
-- [ ] **Authorization**: Role checks in place
-- [ ] **Rate Limiting**: Enabled on all endpoints
-- [ ] **HTTPS**: Enforced in production
-- [ ] **Security Headers**: CSP, X-Frame-Options configured
-- [ ] **Error Handling**: No sensitive data in errors
-- [ ] **Logging**: No sensitive data logged
-- [ ] **Dependencies**: Up to date, no vulnerabilities
-- [ ] **Row Level Security**: Enabled in Supabase
-- [ ] **CORS**: Properly configured
-- [ ] **File Uploads**: Validated (size, type)
-- [ ] **Wallet Signatures**: Verified (if blockchain)
+### For opnConfigGenerator (offline Go CLI)
+
+Before a release:
+
+- [ ] **Secrets**: no hardcoded secrets; generator output contains no real credentials
+- [ ] **`mise exec -- just security-all` passes** — gosec + govulncheck + secret scan clean
+- [ ] **`mise exec -- just ci-check` passes** — format, lint, tests, race
+- [ ] **Dependencies** — `go.mod`/`go.sum` clean; `govulncheck` surfaces no known CVEs
+- [ ] **Gosec exclusions** (`justfile` + `.golangci.yml`) each have a `SECURITY.md` or inline justification
+- [ ] **`CommonDevice` redaction** — any consumer code that serializes `*model.CommonDevice` strips secret fields first (`PrivateKey`, `Password`, `PSK`, etc.); see `docs/solutions/best-practices/opndossier-pkg-consumer-integration-2026-04-18.md`
+- [ ] **Error handling** — no sensitive data leaked via error messages
+- [ ] **Logging** — no secrets written to logs
+- [ ] **Artifacts** — release binaries signed (`cosign`), SBOM generated (`cyclonedx-gomod`), per `RELEASING.md`
 
 ## Resources
 
