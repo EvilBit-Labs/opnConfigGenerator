@@ -27,8 +27,8 @@ func (r ValidationResult) Error() error {
 	return fmt.Errorf("validation failed with %d errors: %v", len(r.Errors), r.Errors)
 }
 
-// ValidateVlans checks a batch of VLAN configurations for consistency.
-func ValidateVlans(vlans []generator.VlanConfig) ValidationResult {
+// Vlans checks a batch of VLAN configurations for consistency.
+func Vlans(vlans []generator.VlanConfig) ValidationResult {
 	var result ValidationResult
 
 	seenIDs := make(map[uint16]bool)
@@ -37,8 +37,16 @@ func ValidateVlans(vlans []generator.VlanConfig) ValidationResult {
 	for i, v := range vlans {
 		// VLAN ID range check.
 		if v.VlanID < generator.MinVlanID || v.VlanID > generator.MaxVlanID {
-			result.Errors = append(result.Errors,
-				fmt.Sprintf("VLAN[%d]: ID %d outside range %d-%d", i, v.VlanID, generator.MinVlanID, generator.MaxVlanID))
+			result.Errors = append(
+				result.Errors,
+				fmt.Sprintf(
+					"VLAN[%d]: ID %d outside range %d-%d",
+					i,
+					v.VlanID,
+					generator.MinVlanID,
+					generator.MaxVlanID,
+				),
+			)
 		}
 
 		// VLAN ID uniqueness.
@@ -78,8 +86,8 @@ func ValidateVlans(vlans []generator.VlanConfig) ValidationResult {
 	return result
 }
 
-// ValidateFirewallRules checks rules for valid actions, protocols, and interface references.
-func ValidateFirewallRules(rules []generator.FirewallRule, validInterfaces map[string]bool) ValidationResult {
+// FirewallRules checks rules for valid actions, protocols, and interface references.
+func FirewallRules(rules []generator.FirewallRule, validInterfaces map[string]bool) ValidationResult {
 	var result ValidationResult
 
 	validActions := map[string]bool{"pass": true, "block": true, "reject": true}
@@ -119,8 +127,8 @@ func ValidateFirewallRules(rules []generator.FirewallRule, validInterfaces map[s
 	return result
 }
 
-// ValidateNoSubnetOverlap checks that VPN tunnel subnets don't overlap with VLAN subnets.
-func ValidateNoSubnetOverlap(vlanNets []netip.Prefix, vpnNets []netip.Prefix) ValidationResult {
+// NoSubnetOverlap checks that VPN tunnel subnets don't overlap with VLAN subnets.
+func NoSubnetOverlap(vlanNets, vpnNets []netip.Prefix) ValidationResult {
 	var result ValidationResult
 
 	for _, vpn := range vpnNets {

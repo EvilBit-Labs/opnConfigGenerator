@@ -1,0 +1,112 @@
+#
+# Release workflow for opnConfigGenerator
+# Triggers on tag push or manual dispatch
+#
+# Uses:
+# - GoReleaser for building and publishing
+# - Cosign v3 for keyless signing (via Sigstore)
+# - CycloneDX-gomod for SBOM generation
+#
+# Reference: https://github.com/goreleaser/example-supply-chain
+#
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g., v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write # needed to write releases
+  id-token: write # needed for keyless signing (OIDC)
+  packages: write # needed for future GHCR support
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    outputs:
+      artifacts: ${{ steps.goreleaser.outputs.artifacts }}
+      metadata: ${{ steps.goreleaser.outputs.metadata }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0 # needed for git-cliff changelog generation
+
+      - name: Setup mise toolchain
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Import GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          if [ -n "${GPG_PRIVATE_KEY}" ]; then
+            echo "${GPG_PRIVATE_KEY}" | base64 --decode | gpg --batch --import
+            # Trust the signing key ultimately
+            echo "138BFA788F377661EA482C1DEFC6F4CABED22E8E:6:" | gpg --import-ownertrust
+          else
+            echo "GPG_PRIVATE_KEY not set, skipping GPG key import"
+          fi
+
+      - name: Reset mise.lock to avoid dirty-tree failure
+        run: git checkout -- mise.lock || true
+
+      - name: Install cyclonedx-gomod for SBOM generation
+        run: go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.10.0
+
+      - name: Remove mise go shim
+        # cyclonedx-gomod shells out to `go mod why` and resolves the mise
+        # shim instead of the real binary, causing trust/vendor failures.
+        # The real go is already on PATH via mise installs — the shim is
+        # redundant and harmful in goreleaser subprocesses.
+        run: rm -f "$HOME/.local/share/mise/shims/go"
+
+      - name: Run GoReleaser
+        id: goreleaser
+        uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: ${{ github.event_name == 'workflow_dispatch' && 'release --clean --snapshot' || 'release --clean' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          # macOS code signing and notarization (optional)
+          QUILL_SIGN_P12: ${{ secrets.QUILL_SIGN_P12 }}
+          QUILL_SIGN_PASSWORD: ${{ secrets.QUILL_SIGN_PASSWORD }}
+          QUILL_NOTARY_KEY: ${{ secrets.QUILL_NOTARY_KEY }}
+          QUILL_NOTARY_KEY_ID: ${{ secrets.QUILL_NOTARY_KEY_ID }}
+          QUILL_NOTARY_ISSUER: ${{ secrets.QUILL_NOTARY_ISSUER }}
+
+      - name: Warn if snapshot mode
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "::warning::This was a snapshot build. No artifacts were published to GitHub Releases."
+          {
+            echo "## Snapshot Build"
+            echo ""
+            echo "This was a **snapshot** build triggered via workflow_dispatch."
+            echo "No artifacts were published."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: dist
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*checksums*
+            dist/*.sigstore.json
+            dist/*.bom.json
+          retention-days: 5

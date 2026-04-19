@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"net/netip"
+	"strconv"
 
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/netutil"
 	"github.com/google/uuid"
@@ -32,8 +33,10 @@ type NatGenerator struct {
 func NewNatGenerator(seed *int64) *NatGenerator {
 	var rng *rand.Rand
 	if seed != nil {
+		//nolint:gosec // Deterministic fake data generation, not security-sensitive
 		rng = rand.New(rand.NewPCG(uint64(*seed), 0))
 	} else {
+		//nolint:gosec // Deterministic fake data generation, not security-sensitive
 		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	}
 
@@ -49,7 +52,7 @@ func (g *NatGenerator) GenerateMappings(vlans []VlanConfig, count int) []NatMapp
 	mappings := make([]NatMapping, 0, count)
 	for i := range count {
 		vlan := vlans[i%len(vlans)]
-		ruleType := NatRuleType(g.rng.IntN(5))
+		ruleType := NatRuleType(g.rng.IntN(natRuleTypes))
 		mapping := g.generateMapping(vlan, ruleType)
 		mappings = append(mappings, mapping)
 	}
@@ -57,9 +60,19 @@ func (g *NatGenerator) GenerateMappings(vlans []VlanConfig, count int) []NatMapp
 	return mappings
 }
 
+// NAT generation constants for host address range and port mapping.
+const (
+	natHostRange  = 200 // Number of host addresses in the NAT pool
+	natHostOffset = 10  // Starting host offset for NAT internal addresses
+	natPortBase   = 8000
+	natPortRange  = 1000
+	natRuleTypes  = 5
+)
+
 func (g *NatGenerator) generateMapping(vlan VlanConfig, ruleType NatRuleType) NatMapping {
 	gateway := netutil.GatewayIP(vlan.IPNetwork)
-	internalHost := netutil.HostIP(vlan.IPNetwork, uint8(g.rng.IntN(200)+10))
+	//nolint:gosec // IntN(200)+10 max is 209, fits uint8 (max 255)
+	internalHost := netutil.HostIP(vlan.IPNetwork, uint8(g.rng.IntN(natHostRange)+natHostOffset))
 
 	switch ruleType {
 	case NatPortForward:
@@ -118,7 +131,7 @@ func (g *NatGenerator) destinationNat(vlan VlanConfig, target netip.Addr) NatMap
 		SourceAddr:  "any",
 		SourcePort:  "any",
 		DestAddr:    "wan_ip",
-		DestPort:    fmt.Sprintf("%d", 8000+g.rng.IntN(1000)),
+		DestPort:    strconv.Itoa(natPortBase + g.rng.IntN(natPortRange)),
 		TargetAddr:  target.String(),
 		TargetPort:  "443",
 		Description: fmt.Sprintf("Destination NAT to %s (VLAN %d)", target, vlan.VlanID),
