@@ -23,17 +23,17 @@ const (
 	baseInterfaceCount = 2
 )
 
-// NetworkResult groups everything the network faker produces so callers
+// networkResult groups everything the network faker produces so callers
 // stitch it into a CommonDevice in one step.
-type NetworkResult struct {
+type networkResult struct {
 	Interfaces []model.Interface
 	VLANs      []model.VLAN
 }
 
 // fakeNetwork produces the standard WAN + LAN pair plus vlanCount opt
 // interfaces, each backed by a unique VLAN tag and RFC 1918 /24 network.
-func fakeNetwork(rng *rand.Rand, f *gofakeit.Faker, vlanCount int) NetworkResult {
-	result := NetworkResult{
+func fakeNetwork(rng *rand.Rand, f *gofakeit.Faker, vlanCount int) networkResult {
+	result := networkResult{
 		Interfaces: make([]model.Interface, 0, baseInterfaceCount+vlanCount),
 		VLANs:      make([]model.VLAN, 0, vlanCount),
 	}
@@ -91,8 +91,14 @@ func fakeNetwork(rng *rand.Rand, f *gofakeit.Faker, vlanCount int) NetworkResult
 	return result
 }
 
+// maxPickAttempts bounds the coupon-collector loops below so a shrinking
+// pool or an off-by-one in the callers cannot hang the CLI indefinitely.
+// Tags have a 4093-slot pool, the RFC 1918 /24 space has ~68K slots — either
+// attempts <= 10 * pool-size is far more than a deterministic run needs.
+const maxPickAttempts = 100_000
+
 func pickUniqueTag(rng *rand.Rand, used map[uint16]bool) uint16 {
-	for {
+	for range maxPickAttempts {
 		//nolint:gosec // Fake data; IntN bounded to uint16 range below.
 		tag := uint16(vlanTagMin + rng.IntN(vlanTagMax-vlanTagMin+1))
 		if !used[tag] {
@@ -100,14 +106,18 @@ func pickUniqueTag(rng *rand.Rand, used map[uint16]bool) uint16 {
 			return tag
 		}
 	}
+	panic(fmt.Sprintf("faker: exhausted %d attempts picking a unique VLAN tag (used=%d of %d)",
+		maxPickAttempts, len(used), vlanTagMax-vlanTagMin+1))
 }
 
 func pickUniqueNet(rng *rand.Rand, used map[string]bool) netip.Prefix {
-	for {
+	for range maxPickAttempts {
 		n := netutil.GenerateRandomNetwork(rng)
 		if !used[n.String()] {
 			used[n.String()] = true
 			return n
 		}
 	}
+	panic(fmt.Sprintf("faker: exhausted %d attempts picking a unique RFC 1918 /24 network (used=%d)",
+		maxPickAttempts, len(used)))
 }

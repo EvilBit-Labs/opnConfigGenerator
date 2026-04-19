@@ -19,20 +19,23 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "opnConfigGenerator",
 	Short: "Generate realistic OPNsense configuration files with fake data",
-	Long: `opnConfigGenerator is a command-line tool for generating realistic OPNsense config.xml files
-populated with fake but valid network configuration data. It's designed for testing, development,
-and demonstration purposes where you need realistic OPNsense configurations without exposing
-sensitive network information.
+	Long: `opnConfigGenerator is the reverse serializer for opnDossier's *model.CommonDevice.
+It produces a valid OPNsense config.xml from a synthetic CommonDevice populated by a faker.
 
-Features:
-  • Generate realistic VLAN configurations
-  • Create valid interface assignments
-  • Generate DHCP pools and static mappings
-  • Create firewall rules with proper dependencies
-  • Generate VPN configurations (OpenVPN, WireGuard, IPSec)
-  • Create NAT rules and port forwards
-  • Support for various output formats (XML, CSV)
-  • Configurable generation parameters`,
+Phase 1 coverage:
+  • System: hostname, domain, timezone, DNS/NTP servers
+  • Interfaces: WAN (DHCP), LAN (static RFC 1918), per-VLAN opt interfaces
+  • VLANs with unique 802.1Q tags on a shared physical parent
+  • DHCP scopes per statically-addressed interface (ISC DHCP)
+  • Default allow firewall rules per non-WAN interface (opt-in)
+
+Deferred to follow-up plans: NAT, VPN (OpenVPN/WireGuard/IPsec), Users/Groups,
+Certificates, IDS, HighAvailability, VirtualIPs, Bridges, GIF/GRE/LAGG, PPP,
+CaptivePortal, Kea DHCP, Monit, Netflow, TrafficShaper, pfSense target.
+
+Zero arguments emits a valid config.xml on stdout. With --base-config, the
+serializer overlays generated content onto an existing document, preserving
+fields Phase 1 does not own.`,
 	PersistentPreRun: func(_ *cobra.Command, _ []string) {
 		// Set up logging based on flags and environment
 		setupLogging()

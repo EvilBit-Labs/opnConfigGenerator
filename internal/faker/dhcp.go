@@ -6,6 +6,7 @@ import (
 
 	"github.com/EvilBit-Labs/opnConfigGenerator/internal/netutil"
 	"github.com/EvilBit-Labs/opnDossier/pkg/model"
+	"github.com/charmbracelet/log"
 )
 
 // fakeDHCPScopes emits one DHCP scope per statically-addressed interface.
@@ -19,6 +20,8 @@ func fakeDHCPScopes(interfaces []model.Interface) []model.DHCPScope {
 		}
 		prefix, err := netip.ParsePrefix(fmt.Sprintf("%s/%s", iface.IPAddress, iface.Subnet))
 		if err != nil {
+			log.Warn("skipping DHCP scope for interface with unparseable prefix",
+				"interface", iface.Name, "ip", iface.IPAddress, "subnet", iface.Subnet, "err", err)
 			continue
 		}
 		scopes = append(scopes, model.DHCPScope{

@@ -15,9 +15,8 @@ func TestFakeFirewallRulesDefaultAllowLAN(t *testing.T) {
 		{Name: "wan", Type: "dhcp"},
 		{Name: "lan", Type: "static"},
 	}
-	_, f := newRand(1)
 
-	rules := fakeFirewallRules(f, interfaces)
+	rules := fakeFirewallRules(interfaces)
 
 	require.Len(t, rules, 1, "WAN excluded, LAN emits one rule")
 	r := rules[0]
@@ -32,14 +31,12 @@ func TestFakeFirewallRulesDefaultAllowLAN(t *testing.T) {
 func TestFakeFirewallRulesNoInterfacesNoRules(t *testing.T) {
 	t.Parallel()
 
-	_, f := newRand(1)
-	assert.Empty(t, fakeFirewallRules(f, nil))
+	assert.Empty(t, fakeFirewallRules(nil))
 }
 
 func TestFakeFirewallRulesOnlyWANNoRules(t *testing.T) {
 	t.Parallel()
 
-	_, f := newRand(1)
-	rules := fakeFirewallRules(f, []model.Interface{{Name: "wan"}})
+	rules := fakeFirewallRules([]model.Interface{{Name: "wan"}})
 	assert.Empty(t, rules)
 }

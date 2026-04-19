@@ -81,49 +81,63 @@ opnConfigGenerator uses a layered architecture separating data generation from d
 
 ```text
 opnConfigGenerator/
-├── cmd/                        # CLI commands (Cobra)
-│   ├── root.go                # Root command, global flags
-│   ├── generate.go            # generate command (csv + xml)
-│   ├── validate.go            # validate command (stub)
-│   └── completion.go          # Shell completion
+├── cmd/                              # CLI commands (Cobra)
+│   ├── root.go                       # Root command, global flags
+│   ├── generate.go                   # generate command (xml + csv)
+│   ├── validate.go                   # validate command (stub)
+│   └── completion.go                 # Shell completion
 ├── internal/
-│   ├── errors/                # Typed errors (ConfigError, VlanError)
-│   ├── netutil/               # RFC 1918 address generation/validation
-│   ├── generator/             # Device-agnostic data generators
-│   │   ├── vlan.go            # VLAN generation with uniqueness tracking
-│   │   ├── dhcp.go            # DHCP config derivation
-│   │   ├── firewall.go        # Firewall rule generation (3 complexity levels)
-│   │   ├── nat.go             # NAT mapping generation
-│   │   ├── vpn.go             # VPN config generation (OpenVPN/WireGuard/IPsec)
-│   │   ├── departments.go     # 20 departments with lease time mappings
-│   │   └── types.go           # Shared generator types
-│   ├── opnsensegen/           # OPNsense-specific serializer (uses opnDossier schema)
-│   ├── csvio/                 # CSV read/write with German headers
-│   └── validate/              # Cross-object consistency checks
-├── testdata/                   # Test fixtures
-├── main.go                     # Entry point
+│   ├── errors/                       # Typed errors
+│   ├── netutil/                      # RFC 1918 address generation/validation
+│   ├── faker/                        # *model.CommonDevice populator
+│   │   ├── device.go                 # NewCommonDevice entry point
+│   │   ├── options.go                # Functional options
+│   │   ├── rand.go                   # Seeded *rand.Rand + *gofakeit.Faker
+│   │   ├── system.go                 # model.System populator
+│   │   ├── network.go                # WAN/LAN/VLAN interfaces + VLAN list
+│   │   ├── dhcp.go                   # []model.DHCPScope populator
+│   │   └── firewall.go               # []model.FirewallRule populator
+│   ├── serializer/
+│   │   └── opnsense/                 # CommonDevice → OpnSenseDocument
+│   │       ├── serializer.go         # Serialize entry point + ErrNilDevice
+│   │       ├── overlay.go            # Overlay onto a base config
+│   │       ├── system.go             # SerializeSystem
+│   │       ├── interfaces.go         # SerializeInterfaces
+│   │       ├── vlans.go              # SerializeVLANs
+│   │       ├── dhcp.go               # SerializeDHCP
+│   │       └── firewall.go           # SerializeFilter
+│   ├── opnsensegen/                  # Transport only: load/parse/marshal XML
+│   └── csvio/                        # CSV output derived from CommonDevice
+├── testdata/                         # Test fixtures (base-config.xml)
+├── main.go                           # Entry point
 ├── go.mod / go.sum
-├── .golangci.yml               # Linter configuration (50+ linters)
-└── justfile                    # Task runner recipes
+├── .golangci.yml                     # Linter configuration
+└── justfile                          # Task runner recipes
 ```
 
 ### Key Design Decisions
 
-**Generators are device-agnostic.** The `internal/generator/` package produces abstract configuration data (`VlanConfig`, `FirewallRule`, `NatMapping`, etc.) with no knowledge of OPNsense XML structure. This data flows into device-specific serializers.
+**`*model.CommonDevice` is the single intermediate representation.** opnDossier defines the model; this project populates it (via `internal/faker/`) and serializes it (via `internal/serializer/opnsense/`). There is no parallel type or wrapper.
 
-**Serializers are device-specific.** `internal/opnsensegen/` maps generator output to opnDossier's `OpnSenseDocument` schema type and marshals to XML. Future device types (pfSense) would get their own serializer package (e.g., `internal/pfsensegen/`).
+**Package layout reserves a pfSense sibling.** `internal/serializer/opnsense/` is organized so a future `internal/serializer/pfsense/` can plug in alongside without restructuring shared code. The CLI routes by `device.DeviceType`.
 
-**Schema types are imported, not duplicated.** The `opnsensegen` package imports types from `github.com/EvilBit-Labs/opnDossier/pkg/schema/opnsense` directly. This guarantees the mock configs match the production schema.
+**Transport is separate from serialization.** `internal/opnsensegen/` only loads, parses, and marshals XML. It does not generate or serialize. `MarshalConfig` post-processes to sort map-backed sections alphabetically (see GOTCHAS §7.1) so output is byte-stable under a fixed seed.
 
-### Adding a New Device Type
+**Schema types are imported, not duplicated.** The serializer imports types from `github.com/EvilBit-Labs/opnDossier/pkg/schema/opnsense` directly. Generated configs are structurally identical to real device exports.
 
-When opnDossier adds a new device parser (e.g., pfSense):
+### Adding a New CommonDevice Subsystem (NAT, VPN, Users, …)
 
-1. Create `internal/pfsensegen/` with serialization logic
-2. Import the appropriate schema types from opnDossier
-3. Wire up a new `--device-type pfsense` flag in `cmd/generate.go`
-4. Add device-specific tests with testdata fixtures
-5. The existing generators (`generator/vlan.go`, etc.) should work unchanged
+1. **Faker** — add `internal/faker/<subsystem>.go` that returns the corresponding `model.*` type, and wire it into `internal/faker/device.go`'s `NewCommonDevice`.
+2. **Serializer** — add `internal/serializer/opnsense/<subsystem>.go` exposing `Serialize<Subsystem>(in) opnsense.<Type>`, and wire it into both `Serialize` (`serializer.go`) and `Overlay` (`overlay.go`) so overlay replaces the subsystem wholesale.
+3. **Round-trip test** — extend `TestRoundTrip` in `serializer_test.go` with per-field parity assertions on the new subsystem. A new subsystem without round-trip assertions is not in-scope for CI.
+4. **GOTCHAS §7.1** — if the schema type is `map[string]T`, add the parent element name to `mapBackedSections` in `internal/opnsensegen/template.go`.
+
+### Adding a New Device Type (pfSense, …)
+
+1. Create `internal/serializer/pfsense/` mirroring `internal/serializer/opnsense/`.
+2. Import the appropriate schema types (e.g., `github.com/EvilBit-Labs/opnDossier/pkg/schema/pfsense`).
+3. Route from `cmd/generate.go` based on `device.DeviceType` (or an explicit flag).
+4. Round-trip tests must go through opnDossier's corresponding parser.
 
 ## Code Style
 

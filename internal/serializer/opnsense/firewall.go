@@ -27,13 +27,16 @@ func SerializeFilter(rules []model.FirewallRule) opnsense.Filter {
 	return out
 }
 
-// endpointToSource maps model.RuleEndpoint onto opnsense.Source. Address
-// "any" becomes the presence-flag form (<any/>); a non-empty Network-style
-// label or CIDR lands in Source.Network.
+// endpointToSource maps model.RuleEndpoint onto opnsense.Source. Only
+// Address == "any" becomes the presence-flag form (<any/>). Empty Address
+// leaves Source with all match fields unset — OPNsense treats that as
+// "no match specified", which is distinct from "explicitly any".
 func endpointToSource(ep model.RuleEndpoint) opnsense.Source {
 	s := opnsense.Source{Port: ep.Port}
 	switch ep.Address {
-	case "", opnsense.NetworkAny:
+	case "":
+		// Leave Any/Network/Address unset.
+	case opnsense.NetworkAny:
 		empty := ""
 		s.Any = &empty
 	default:
@@ -49,7 +52,9 @@ func endpointToSource(ep model.RuleEndpoint) opnsense.Source {
 func endpointToDestination(ep model.RuleEndpoint) opnsense.Destination {
 	d := opnsense.Destination{Port: ep.Port}
 	switch ep.Address {
-	case "", opnsense.NetworkAny:
+	case "":
+		// Leave Any/Network/Address unset.
+	case opnsense.NetworkAny:
 		empty := ""
 		d.Any = &empty
 	default:

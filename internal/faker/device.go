@@ -28,7 +28,7 @@ func NewCommonDevice(opts ...Option) *model.CommonDevice {
 
 	var fwRules []model.FirewallRule
 	if cfg.firewallRules {
-		fwRules = fakeFirewallRules(f, net.Interfaces)
+		fwRules = fakeFirewallRules(net.Interfaces)
 	}
 
 	return &model.CommonDevice{

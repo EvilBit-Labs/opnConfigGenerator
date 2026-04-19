@@ -50,13 +50,13 @@ func ParseConfig(data []byte) (*opnsense.OpnSenseDocument, error) {
 // two-space indentation, and a trailing newline. Children of map-backed
 // sections (interfaces, dhcpd) are sorted alphabetically so output is
 // byte-stable under a fixed seed.
+//
+// The entire document is assembled in memory before the first Write to w so
+// that any encoding or stabilization error leaves the destination untouched
+// rather than emitting a truncated file.
 func MarshalConfig(cfg *opnsense.OpnSenseDocument, w io.Writer) error {
-	if _, err := io.WriteString(w, xml.Header); err != nil {
-		return fmt.Errorf("write XML header: %w", err)
-	}
-
-	var buf bytes.Buffer
-	enc := xml.NewEncoder(&buf)
+	var body bytes.Buffer
+	enc := xml.NewEncoder(&body)
 	enc.Indent("", "  ")
 	if err := enc.Encode(cfg); err != nil {
 		return fmt.Errorf("encode config XML: %w", err)
@@ -65,18 +65,20 @@ func MarshalConfig(cfg *opnsense.OpnSenseDocument, w io.Writer) error {
 		return fmt.Errorf("flush XML encoder: %w", err)
 	}
 
-	stable, err := sortMapBackedSections(buf.Bytes())
+	stable, err := sortMapBackedSections(body.Bytes())
 	if err != nil {
 		return fmt.Errorf("stabilize XML: %w", err)
 	}
-	if _, err := w.Write(stable); err != nil {
-		return fmt.Errorf("write XML body: %w", err)
-	}
 
-	if _, err := io.WriteString(w, "\n"); err != nil {
-		return fmt.Errorf("write trailing newline: %w", err)
-	}
+	var out bytes.Buffer
+	out.Grow(len(xml.Header) + len(stable) + 1)
+	out.WriteString(xml.Header)
+	out.Write(stable)
+	out.WriteByte('\n')
 
+	if _, err := w.Write(out.Bytes()); err != nil {
+		return fmt.Errorf("write XML: %w", err)
+	}
 	return nil
 }
 

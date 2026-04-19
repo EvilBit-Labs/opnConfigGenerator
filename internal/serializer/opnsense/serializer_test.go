@@ -15,8 +15,9 @@ import (
 
 // TestRoundTrip is the primary acceptance gate for R1. It exercises the
 // full pipeline: faker → Serialize → MarshalConfig → ParseConfig →
-// ConvertDocument. The CommonDevice that comes out must match the one that
-// went in on the fields Phase 1 covers.
+// ConvertDocument, then asserts per-field parity on every field Phase 1
+// claims to cover. Count-only assertions were insufficient — they missed
+// silent field drops (e.g., Interface.Type, Interface.Virtual).
 func TestRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -41,12 +42,78 @@ func TestRoundTrip(t *testing.T) {
 
 	require.NotNil(t, roundTripped)
 	assert.Equal(t, model.DeviceTypeOPNsense, roundTripped.DeviceType)
+
+	// System parity.
 	assert.Equal(t, original.System.Hostname, roundTripped.System.Hostname)
 	assert.Equal(t, original.System.Domain, roundTripped.System.Domain)
-	assert.Len(t, roundTripped.VLANs, len(original.VLANs))
-	assert.Len(t, roundTripped.Interfaces, len(original.Interfaces))
-	assert.Len(t, roundTripped.DHCP, len(original.DHCP))
+
+	// Interface per-field parity, keyed by Name.
+	require.Len(t, roundTripped.Interfaces, len(original.Interfaces))
+	origIfaces := interfacesByName(original.Interfaces)
+	rtIfaces := interfacesByName(roundTripped.Interfaces)
+	for name, want := range origIfaces {
+		got, ok := rtIfaces[name]
+		require.Truef(t, ok, "interface %q missing on round-trip", name)
+		assert.Equalf(t, want.Type, got.Type, "interface %q Type", name)
+		assert.Equalf(t, want.Virtual, got.Virtual, "interface %q Virtual", name)
+		assert.Equalf(t, want.Description, got.Description, "interface %q Description", name)
+		if want.Type == "static" {
+			assert.Equalf(t, want.IPAddress, got.IPAddress, "interface %q IPAddress", name)
+			assert.Equalf(t, want.Subnet, got.Subnet, "interface %q Subnet", name)
+		}
+	}
+
+	// VLAN per-field parity, keyed by Tag because order is not guaranteed.
+	require.Len(t, roundTripped.VLANs, len(original.VLANs))
+	origVLANs := vlansByTag(original.VLANs)
+	rtVLANs := vlansByTag(roundTripped.VLANs)
+	for tag, want := range origVLANs {
+		got, ok := rtVLANs[tag]
+		require.Truef(t, ok, "VLAN %q missing on round-trip", tag)
+		assert.Equalf(t, want.VLANIf, got.VLANIf, "VLAN %q VLANIf", tag)
+		assert.Equalf(t, want.PhysicalIf, got.PhysicalIf, "VLAN %q PhysicalIf", tag)
+		assert.Equalf(t, want.Description, got.Description, "VLAN %q Description", tag)
+	}
+
+	// DHCP scope parity, keyed by interface name.
+	require.Len(t, roundTripped.DHCP, len(original.DHCP))
+	origDHCP := dhcpByInterface(original.DHCP)
+	rtDHCP := dhcpByInterface(roundTripped.DHCP)
+	for iface, want := range origDHCP {
+		got, ok := rtDHCP[iface]
+		require.Truef(t, ok, "DHCP scope for %q missing on round-trip", iface)
+		assert.Equalf(t, want.Range.From, got.Range.From, "DHCP %q Range.From", iface)
+		assert.Equalf(t, want.Range.To, got.Range.To, "DHCP %q Range.To", iface)
+		assert.Equalf(t, want.Gateway, got.Gateway, "DHCP %q Gateway", iface)
+		assert.Equalf(t, want.DNSServer, got.DNSServer, "DHCP %q DNSServer", iface)
+	}
+
 	assert.Len(t, roundTripped.FirewallRules, len(original.FirewallRules))
+}
+
+// TestRoundTripByteStable asserts MarshalConfig output is byte-identical
+// across repeated calls on the same input. A single repeat is not enough
+// to catch a regression in sortMapBackedSections because Go's map iteration
+// is randomized per-encode; 10 iterations provide high confidence.
+func TestRoundTripByteStable(t *testing.T) {
+	t.Parallel()
+
+	device := faker.NewCommonDevice(
+		faker.WithSeed(99),
+		faker.WithVLANCount(4),
+		faker.WithFirewallRules(true),
+	)
+	doc, err := serializer.Serialize(device)
+	require.NoError(t, err)
+
+	var first bytes.Buffer
+	require.NoError(t, opnsensegen.MarshalConfig(doc, &first))
+
+	for i := range 10 {
+		var next bytes.Buffer
+		require.NoError(t, opnsensegen.MarshalConfig(doc, &next))
+		require.Equalf(t, first.Bytes(), next.Bytes(), "marshal #%d diverged", i+1)
+	}
 }
 
 func TestSerializeNilDevice(t *testing.T) {
@@ -54,4 +121,28 @@ func TestSerializeNilDevice(t *testing.T) {
 
 	_, err := serializer.Serialize(nil)
 	require.ErrorIs(t, err, serializer.ErrNilDevice)
+}
+
+func interfacesByName(xs []model.Interface) map[string]model.Interface {
+	m := make(map[string]model.Interface, len(xs))
+	for _, x := range xs {
+		m[x.Name] = x
+	}
+	return m
+}
+
+func vlansByTag(xs []model.VLAN) map[string]model.VLAN {
+	m := make(map[string]model.VLAN, len(xs))
+	for _, x := range xs {
+		m[x.Tag] = x
+	}
+	return m
+}
+
+func dhcpByInterface(xs []model.DHCPScope) map[string]model.DHCPScope {
+	m := make(map[string]model.DHCPScope, len(xs))
+	for _, x := range xs {
+		m[x.Interface] = x
+	}
+	return m
 }

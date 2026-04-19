@@ -40,7 +40,7 @@ func TestSerializeFilterEmpty(t *testing.T) {
 	assert.Empty(t, serializer.SerializeFilter(nil).Rule)
 }
 
-func TestSerializeFilterEmptyEndpointDefaultsToAny(t *testing.T) {
+func TestSerializeFilterEmptyEndpointStaysEmpty(t *testing.T) {
 	t.Parallel()
 
 	in := []model.FirewallRule{{
@@ -52,6 +52,26 @@ func TestSerializeFilterEmptyEndpointDefaultsToAny(t *testing.T) {
 
 	out := serializer.SerializeFilter(in)
 	require.Len(t, out.Rule, 1)
-	require.NotNil(t, out.Rule[0].Source.Any, "empty source address → <any/>")
+	// Empty source (Address=="") is distinct from "any"; Any pointer stays nil.
+	assert.Nil(t, out.Rule[0].Source.Any)
+	assert.Empty(t, out.Rule[0].Source.Network)
+	assert.Empty(t, out.Rule[0].Source.Address)
 	assert.Equal(t, "10.0.0.0/24", out.Rule[0].Destination.Network)
+}
+
+func TestSerializeFilterExplicitAnyEmitsAnyElement(t *testing.T) {
+	t.Parallel()
+
+	in := []model.FirewallRule{{
+		Interfaces:  []string{"lan"},
+		Type:        model.RuleTypePass,
+		Source:      model.RuleEndpoint{Address: "lan"},
+		Destination: model.RuleEndpoint{Address: "any"},
+	}}
+
+	out := serializer.SerializeFilter(in)
+	require.Len(t, out.Rule, 1)
+	assert.Equal(t, "lan", out.Rule[0].Source.Network)
+	assert.Nil(t, out.Rule[0].Source.Any, "explicit source network must not emit <any/>")
+	require.NotNil(t, out.Rule[0].Destination.Any, "explicit 'any' destination must emit <any/>")
 }
