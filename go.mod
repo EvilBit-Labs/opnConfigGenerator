@@ -4,6 +4,7 @@ go 1.26
 
 require (
 	github.com/EvilBit-Labs/opnDossier v1.4.0
+	github.com/brianvoe/gofakeit/v7 v7.14.1
 	github.com/charmbracelet/log v1.0.0
 	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.10.2
