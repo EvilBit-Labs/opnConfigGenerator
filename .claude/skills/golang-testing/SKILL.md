@@ -6,7 +6,7 @@ origin: ECC
 
 # Go Testing Patterns
 
-> **Project addendum (opnConfigGenerator):** Run tests via `mise exec -- just test` (standard), `mise exec -- just test-race` (full race detection, 10m timeout), or `mise exec -- just test-integration` (build tag `integration`). `just ci-check` runs all three. See `internal/opnsensegen/*_test.go` for canonical table-driven examples in this repo and `internal/opnsensegen/deps_isolation_test.go` for a `go list -deps` regression test pattern. Note the lint rules: `testifylint` requires `require.ErrorIs`/`require.NoError` (not `assert`) for error assertions, `noctx` requires `exec.CommandContext` (not `exec.Command`), and `//nolint:` directives must be on a SEPARATE LINE above the call (inline gets stripped by gofumpt).
+> **Project addendum (opnConfigGenerator):** Run tests via `mise exec -- just test` (standard), `mise exec -- just test-race` (race detection; flags owned by the `test-race` recipe in `justfile`), or `mise exec -- just test-integration` (build tag `integration`). `just ci-check` runs all three. See `internal/opnsensegen/*_test.go` for canonical table-driven examples in this repo and `internal/opnsensegen/deps_isolation_test.go` for a `go list -deps` regression test pattern. Note the lint rules: `testifylint` requires `require.ErrorIs`/`require.NoError` (not `assert`) for error assertions, `noctx` requires `exec.CommandContext` (not `exec.Command`), and `//nolint:` directives must be on a SEPARATE LINE above the call (inline gets stripped by gofumpt).
 
 Comprehensive Go testing patterns for writing reliable, maintainable tests following TDD methodology.
 

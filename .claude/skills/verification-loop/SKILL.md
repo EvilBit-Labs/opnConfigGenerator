@@ -26,15 +26,16 @@ Expands to: `check format-check lint test test-integration test-race`. AGENTS.md
 
 ## Granular Recipes (when triaging failures)
 
-| Recipe                               | Purpose                             |
-| ------------------------------------ | ----------------------------------- |
-| `mise exec -- just format-check`     | gofumpt / goimports check           |
-| `mise exec -- just lint`             | golangci-lint (see `.golangci.yml`) |
-| `mise exec -- just test`             | `go test ./...`                     |
-| `mise exec -- just test-race`        | `go test -race -timeout 10m ./...`  |
-| `mise exec -- just test-integration` | `go test -tags=integration ./...`   |
-| `mise exec -- just test-coverage`    | writes `coverage.txt`               |
-| `mise exec -- just security-all`     | gosec + govulncheck + secret scan   |
+| Recipe                               | Purpose                                                        |
+| ------------------------------------ | -------------------------------------------------------------- |
+| `mise exec -- just check`            | `pre-commit run --all-files` (pre-commit gate)                 |
+| `mise exec -- just format-check`     | gofumpt / goimports check                                      |
+| `mise exec -- just lint`             | golangci-lint (see `.golangci.yml`)                            |
+| `mise exec -- just test`             | `go test ./...`                                                |
+| `mise exec -- just test-race`        | `go test -race -timeout 10m ./...` (timeout owned by justfile) |
+| `mise exec -- just test-integration` | `go test -tags=integration ./...`                              |
+| `mise exec -- just test-coverage`    | writes `coverage.txt`                                          |
+| `mise exec -- just security-all`     | gosec + govulncheck + secret scan                              |
 
 ## Phase-by-Phase (when `ci-check` fails)
 
@@ -45,7 +46,7 @@ Expands to: `check format-check lint test test-integration test-race`. AGENTS.md
 
 ## Security Scan
 
-`mise exec -- just security-all` runs gosec, govulncheck, and a secret scan. Do not add findings to `.gosec.toml` exclusions without a reference to `SECURITY.md` or a documented rationale.
+`mise exec -- just security-all` runs gosec, govulncheck, and a secret scan. Gosec exclusions live in `justfile` (the `-exclude=G...` flags on the gosec recipe) and in `.golangci.yml` under `linters.settings.gosec`. Do not add an exclusion without a reference to `SECURITY.md` or a documented rationale.
 
 ## Diff Review
 

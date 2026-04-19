@@ -62,7 +62,7 @@ if err != nil {
 
 ### 2. If using `Factory`, respect the registration contract
 
-`pkg/parser` follows a `database/sql`-style driver registration pattern. Device parsers register themselves via `init()` inside `pkg/parser/opnsense` and `pkg/parser/pfsense`. You must blank-import at least one of them or `Factory.CreateDevice` returns an "empty registry" error. opnDossier has a regression test upstream locking the error message so it names the missing blank import — follow the hint if you hit it.
+`pkg/parser` follows a `database/sql`-style driver registration pattern. Device parsers register themselves via `init()` inside `pkg/parser/opnsense` and `pkg/parser/pfsense`. You must blank-import at least one of them or `Factory.CreateDevice` returns an "empty registry" error. opnDossier's registry currently returns an error that names the blank import to add; if that contract changes, `Factory` users will see a generic empty-registry error instead — treat the hint as best-effort, not guaranteed.
 
 ### 3. Round-trip verification tests through XML bytes, not in-memory structs
 
@@ -235,11 +235,10 @@ This is a stopgap — track [opnDossier#NATS-146 follow-up](https://evilbitlabs.
 
 ## Related
 
-- Plan: `docs/plans/2026-04-18-002-feat-opnDossier-pkg-consumer-verification-plan.md` (local, gitignored)
 - Tickets: [NATS-146](https://evilbitlabs.atlassian.net/browse/NATS-146) (this work), [NATS-107 epic](https://evilbitlabs.atlassian.net/browse/NATS-107), NATS-3 / NATS-144 / NATS-145 (upstream audit chain)
 - `internal/opnsensegen/commondevice_test.go` — consumer pipeline tests (round-trip, minimal, nil)
 - `internal/opnsensegen/deps_isolation_test.go` — CLI-dep leak regression test
 - `internal/opnsensegen/template.go` — `ParseConfig`, `MarshalConfig`, `LoadBaseConfig` helpers
 - `CONTRIBUTING.md` — already forbids duplicating opnDossier schema types locally
 - `GOTCHAS.md` §7 "CommonDevice to Device Serializer" — reserved for any `ConversionWarning`s or serialization quirks observed in consumer runs
-- Upstream `docs/development/public-api.md` (in opnDossier repo) — authoritative API stability policy
+- Upstream [docs/development/public-api.md @ v1.4.0](https://github.com/EvilBit-Labs/opnDossier/blob/v1.4.0/docs/development/public-api.md) — authoritative API stability policy (pin re-audit on every opnDossier bump)

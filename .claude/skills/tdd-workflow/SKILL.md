@@ -6,7 +6,7 @@ origin: ECC
 
 # Test-Driven Development Workflow
 
-> **Project addendum (opnConfigGenerator):** TDD inner loop is `mise exec -- just test-race` (race detector, 10m timeout). Full gate is `mise exec -- just ci-check`. This project follows `AGENTS.md` §Code Quality Policy — zero-tolerance for tech debt; fix failures regardless of when they were introduced. The generic "80% coverage" threshold here is a floor, not a ceiling; prefer load-bearing assertions (test a single mutation on each assertion to prove it fails; see `internal/opnsensegen/deps_isolation_test.go` for a documented example). Use the standard library's `testing` with `stretchr/testify` (`require` for error paths, `assert` for continuation), table-driven tests (see `internal/opnsensegen/template_test.go`), and `t.Parallel()` by default.
+> **Project addendum (opnConfigGenerator):** TDD inner loop is `mise exec -- just test-race` (race detector; flags owned by the `test-race` recipe in `justfile`). Full gate is `mise exec -- just ci-check`. This project follows `AGENTS.md` §Code Quality Policy — zero-tolerance for tech debt; fix failures regardless of when they were introduced. The generic "80% coverage" threshold here is a floor, not a ceiling; prefer load-bearing assertions (test a single mutation on each assertion to prove it fails; see `internal/opnsensegen/deps_isolation_test.go` for a documented example). Use the standard library's `testing` with `stretchr/testify` (`require` for error paths, `assert` for continuation), table-driven tests (see `internal/opnsensegen/template_test.go`), and `t.Parallel()` by default.
 
 This skill ensures all code development follows TDD principles with comprehensive test coverage.
 
